@@ -19,6 +19,7 @@ import { formatDay } from './formatters/dayFormatter';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
 import { getCurrentDate, getCurrentWeekDates, getDateWithOffset, getMonthWeeks } from './utils/date';
 import { minutesToDuration } from './utils/time';
+import { handleHelp } from './handlers/help';
 
 interface Env {
 	DB: D1Database;
@@ -1107,6 +1108,17 @@ Envía el nuevo emoji para este mes:`,
 			return new Response('OK');
 		}
 
+		if (text === '/start') {
+			await handleHelp({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
 		if (text === '/today') {
 			await handleToday({
 				env,
@@ -1197,6 +1209,17 @@ Envía el nuevo emoji para este mes:`,
 
 		if (text === '/settings') {
 			await handleSettings({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
+		if (text === '/help') {
+			await handleHelp({
 				env,
 				chat,
 				telegramChatId,
