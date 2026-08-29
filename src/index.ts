@@ -9,6 +9,7 @@ import { handleWeek } from './handlers/week';
 import { handleMonth } from './handlers/month';
 import { handleAdd } from './handlers/add';
 import { handleGames } from './handlers/games';
+import { handleEdit } from './handlers/edit';
 import { handleState } from './handlers/state';
 import { handleIn } from './handlers/in';
 import { handleOut } from './handlers/out';
@@ -205,6 +206,77 @@ Hora de entrada:`,
 						],
 					},
 				);
+
+				return new Response('OK');
+			}
+
+			const editGameMatch = callback.data.match(/^edit:game:(\d+)$/);
+
+			if (editGameMatch) {
+				const gameId = Number(editGameMatch[1]);
+
+				const game = await getGameById(env.DB, gameId, chat.id);
+
+				if (!game) {
+					await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+
+					return new Response('OK');
+				}
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})
+
+¿Qué quieres editar?`,
+					{
+						inline_keyboard: [
+							[
+								{
+									text: '🕒 Hora',
+									callback_data: `edit:time:${game.id}`,
+								},
+								{
+									text: '👤 Cliente',
+									callback_data: `edit:client:${game.id}`,
+								},
+								{
+									text: '🎮 Juego',
+									callback_data: `edit:type:${game.id}`,
+								},
+							],
+							[
+								{
+									text: '⬇️ Entrada',
+									callback_data: `edit:in:${game.id}`,
+								},
+								{
+									text: '⬆️ Salida',
+									callback_data: `edit:out:${game.id}`,
+								},
+								{
+									text: '🗑 Eliminar',
+									callback_data: `edit:delete:${game.id}`,
+								},
+							],
+							[
+								{
+									text: '❌ Cancelar',
+									callback_data: 'edit:cancel',
+								},
+							],
+						],
+					},
+				);
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'edit:cancel') {
+				await clearChatState(env.DB, chat.id);
+
+				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Edición cancelada.');
 
 				return new Response('OK');
 			}
@@ -583,6 +655,17 @@ ${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()
 
 		if (text === '/games') {
 			await handleGames({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
+		if (text === '/edit') {
+			await handleEdit({
 				env,
 				chat,
 				telegramChatId,
