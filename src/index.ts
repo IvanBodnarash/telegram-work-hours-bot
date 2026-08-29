@@ -270,8 +270,6 @@ Hora de entrada:`,
 					telegramThreadId,
 					`${body}
 
-${separator}
-
 ${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()}`,
 				);
 
@@ -415,8 +413,6 @@ Formato: HH:MM`,
 					telegramThreadId,
 					`${body}
 
-${separator}
-
 ${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()}`,
 				);
 
@@ -472,20 +468,13 @@ ${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()
 
 				const body = visibleDays.map((day) => day.text).join(`\n\n${separator}\n\n`);
 
-				const monthName = new Intl.DateTimeFormat('es-ES', {
-					timeZone: 'UTC',
-					month: 'long',
-				}).format(new Date(Date.UTC(year, month - 1, 1)));
-
 				await sendTelegramMessage(
 					env.TELEGRAM_BOT_TOKEN,
 					telegramChatId,
 					telegramThreadId,
 					`${body}
 
-${separator}
-
-${separatorEmoji} TOTAL ${capitalize(monthName)}: ${minutesToDuration(totalMinutes).toUpperCase()}`,
+${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()}`,
 				);
 
 				return new Response('OK');
