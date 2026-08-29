@@ -2,7 +2,7 @@ import { getOrCreateChat } from './services/chatService';
 import { getGameTypeById } from './services/gameTypeService';
 import { getChatState, clearChatState, setChatState } from './services/chatStateService';
 import { getOrCreateWorkDay } from './services/workDayService';
-import { createGame, getGameById, attachGameToSession } from './services/gameService';
+import { createGame, getGameById, attachGameToSession, updateGameScheduledTime, updateGameClientName } from './services/gameService';
 import { closeWorkSession, createWorkSession } from './services/workSessionService';
 import { handleToday } from './handlers/today';
 import { handleWeek } from './handlers/week';
@@ -273,10 +273,66 @@ Hora de entrada:`,
 				return new Response('OK');
 			}
 
+			const editTimeMatch = callback.data.match(/^edit:time:(\d+)$/);
+
+			if (editTimeMatch) {
+				const gameId = Number(editTimeMatch[1]);
+
+				const game = await getGameById(env.DB, gameId, chat.id);
+
+				if (!game) {
+					return new Response('OK');
+				}
+
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_GAME_TIME', {
+					gameId,
+				});
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Hora actual: ${game.scheduled_time}
+
+Escribe la nueva hora.
+
+Formato: HH:MM`,
+				);
+
+				return new Response('OK');
+			}
+
 			if (callback.data === 'edit:cancel') {
 				await clearChatState(env.DB, chat.id);
 
 				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Edición cancelada.');
+
+				return new Response('OK');
+			}
+
+			const editClientMatch = callback.data.match(/^edit:client:(\d+)$/);
+
+			if (editClientMatch) {
+				const gameId = Number(editClientMatch[1]);
+
+				const game = await getGameById(env.DB, gameId, chat.id);
+
+				if (!game) {
+					return new Response('OK');
+				}
+
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_GAME_CLIENT', {
+					gameId,
+				});
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Cliente actual: ${game.client_name}
+
+Escribe el nuevo nombre:`,
+				);
 
 				return new Response('OK');
 			}

@@ -122,3 +122,39 @@ export async function attachGameToSession(db: D1Database, gameId: number, workSe
 		.bind(workSessionId, gameId)
 		.run();
 }
+
+export async function updateGameScheduledTime(db: D1Database, gameId: number, chatId: number, scheduledTime: string): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE games
+			SET scheduled_time = ?
+			WHERE id = ?
+			AND work_day_id IN (
+				SELECT id
+				FROM work_days
+				WHERE chat_id = ?
+			)
+		`,
+		)
+		.bind(scheduledTime, gameId, chatId)
+		.run();
+}
+
+export async function updateGameClientName(db: D1Database, gameId: number, chatId: number, clientName: string): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE games
+			SET client_name = ?
+			WHERE id = ?
+			AND work_day_id IN (
+				SELECT id
+				FROM work_days
+				WHERE chat_id = ?
+			)
+		`,
+		)
+		.bind(clientName, gameId, chatId)
+		.run();
+}

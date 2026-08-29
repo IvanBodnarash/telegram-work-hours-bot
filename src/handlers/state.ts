@@ -1,6 +1,6 @@
 import type { Chat } from '../services/chatService';
 import { getChatState, clearChatState, setChatState } from '../services/chatStateService';
-import { attachGameToSession } from '../services/gameService';
+import { attachGameToSession, updateGameClientName, updateGameScheduledTime } from '../services/gameService';
 import { createGameType, getGameTypeById } from '../services/gameTypeService';
 import { createMonthSettings } from '../services/monthSettingsService';
 import { closeWorkSession, createWorkSession } from '../services/workSessionService';
@@ -299,6 +299,66 @@ Usa el formato HH:MM, por ejemplo:
 		await clearChatState(env.DB, chat.id);
 
 		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida registrada: ${time}`);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_EDIT_GAME_TIME') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.gameId) {
+			await clearChatState(env.DB, chat.id);
+
+			return true;
+		}
+
+		const time = text.trim();
+
+		if (!isValidTime(time)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Hora no válida.
+
+Usa el formato HH:MM, por ejemplo:
+17:30`,
+			);
+
+			return true;
+		}
+
+		await updateGameScheduledTime(env.DB, data.gameId, chat.id, time);
+
+		await clearChatState(env.DB, chat.id);
+
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Hora actualizada: ${time}`);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_EDIT_GAME_CLIENT') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.gameId) {
+			await clearChatState(env.DB, chat.id);
+
+			return true;
+		}
+
+		const clientName = text.trim();
+
+		if (!clientName) {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ El nombre no puede estar vacío.');
+
+			return true;
+		}
+
+		await updateGameClientName(env.DB, data.gameId, chat.id, clientName);
+
+		await clearChatState(env.DB, chat.id);
+
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Cliente actualizado: ${clientName}`);
 
 		return true;
 	}
