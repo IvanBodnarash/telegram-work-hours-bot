@@ -1,7 +1,7 @@
 import type { Chat } from '../services/chatService';
 
 import { getChatState, clearChatState, setChatState } from '../services/chatStateService';
-import { createGameType } from '../services/gameTypeService';
+import { createGameType, getGameTypeById } from '../services/gameTypeService';
 
 import { createMonthSettings } from '../services/monthSettingsService';
 import { sendTelegramMessage } from '../utils/telegram';
@@ -171,6 +171,64 @@ Usa el formato HH:MM, por ejemplo:
 			`Hora: ${time}
 
 ¿Cuál es el nombre del cliente?`,
+		);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_GAME_CLIENT') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.gameTypeId || !data?.scheduledTime) {
+			await clearChatState(env.DB, chat.id);
+			return true;
+		}
+
+		const clientName = text.trim();
+
+		if (!clientName) {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Escribe un nombre válido.');
+
+			return true;
+		}
+
+		const gameType = await getGameTypeById(env.DB, data.gameTypeId, chat.id);
+
+		if (!gameType) {
+			await clearChatState(env.DB, chat.id);
+
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+
+			return true;
+		}
+
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_CONFIRMATION', {
+			gameTypeId: data.gameTypeId,
+			scheduledTime: data.scheduledTime,
+			clientName,
+		});
+
+		await sendTelegramMessage(
+			env.TELEGRAM_BOT_TOKEN,
+			telegramChatId,
+			telegramThreadId,
+			`${gameType.emoji} ${gameType.name} |${data.scheduledTime}| (${clientName})
+
+¿Guardar?`,
+			{
+				inline_keyboard: [
+					[
+						{
+							text: '✅ Guardar',
+							callback_data: 'add_game:save',
+						},
+						{
+							text: '❌ Cancelar',
+							callback_data: 'add_game:cancel',
+						},
+					],
+				],
+			},
 		);
 
 		return true;

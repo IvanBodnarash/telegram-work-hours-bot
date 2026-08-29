@@ -5,7 +5,10 @@ import { handleAdd } from './handlers/add';
 import { handleGames } from './handlers/games';
 import { handleState } from './handlers/state';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
-import { setChatState } from './services/chatStateService';
+import { getChatState, clearChatState, setChatState } from './services/chatStateService';
+import { getCurrentDate } from './utils/date';
+import { getOrCreateWorkDay } from './services/workDayService';
+import { createGame } from './services/gameService';
 
 interface Env {
 	DB: D1Database;
@@ -75,12 +78,54 @@ export default {
 				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'Nombre del juego:');
 			}
 
-			if (callback.data.startsWith('add_game:')) {
-				const gameTypeId = Number(callback.data.split(':')[1]);
+			if (callback.data === 'add_game:save') {
+				const chatState = await getChatState(env.DB, chat.id);
 
-				if (!Number.isInteger(gameTypeId)) {
+				if (!chatState || chatState.state !== 'WAITING_FOR_GAME_CONFIRMATION') {
 					return new Response('OK');
 				}
+
+				const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+				if (!data?.gameTypeId || !data?.scheduledTime || !data?.clientName) {
+					await clearChatState(env.DB, chat.id);
+					return new Response('OK');
+				}
+
+				const workDate = getCurrentDate(chat.timezone);
+
+				const workDay = await getOrCreateWorkDay(env.DB, chat.id, workDate);
+
+				await createGame(env.DB, workDay.id, data.gameTypeId, data.scheduledTime, data.clientName);
+
+				await clearChatState(env.DB, chat.id);
+
+				const gameType = await getGameTypeById(env.DB, data.gameTypeId, chat.id);
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`✅ Juego guardado
+
+${gameType?.emoji ?? ''} ${gameType?.name ?? ''} |${data.scheduledTime}| (${data.clientName})`,
+				);
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'add_game:cancel') {
+				await clearChatState(env.DB, chat.id);
+
+				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Operación cancelada.');
+
+				return new Response('OK');
+			}
+
+			const gameTypeMatch = callback.data.match(/^add_game:(\d+)$/);
+
+			if (gameTypeMatch) {
+				const gameTypeId = Number(gameTypeMatch[1]);
 
 				const gameType = await getGameTypeById(env.DB, gameTypeId, chat.id);
 
