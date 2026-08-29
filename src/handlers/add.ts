@@ -5,6 +5,7 @@ import { getGameTypes } from '../services/gameTypeService';
 import { setChatState } from '../services/chatStateService';
 
 import { sendTelegramMessage } from '../utils/telegram';
+import { getDatePickerKeyboard } from '../utils/datePicker';
 
 interface Env {
 	DB: D1Database;
@@ -19,17 +20,19 @@ interface HandleAddParams {
 }
 
 export async function handleAdd({ env, chat, telegramChatId, telegramThreadId }: HandleAddParams): Promise<void> {
-	const now = new Date();
+	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Para qué día?', getDatePickerKeyboard('add'));
+}
 
-	const parts = new Intl.DateTimeFormat('en-CA', {
-		timeZone: chat.timezone,
-		year: 'numeric',
-		month: '2-digit',
-	}).formatToParts(now);
-
-	const year = Number(parts.find((part) => part.type === 'year')?.value);
-
-	const month = Number(parts.find((part) => part.type === 'month')?.value);
+export async function startAddForDate({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	workDate,
+}: HandleAddParams & {
+	workDate: string;
+}): Promise<void> {
+	const [year, month] = workDate.split('-').map(Number);
 
 	const monthSettings = await getMonthSettings(env.DB, chat.id, year, month);
 
@@ -37,13 +40,16 @@ export async function handleAdd({ env, chat, telegramChatId, telegramThreadId }:
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_MONTH_EMOJI', {
 			year,
 			month,
+			workDate,
 		});
 
+		const monthDate = new Date(Date.UTC(year, month - 1, 1));
+
 		const monthName = new Intl.DateTimeFormat('es-ES', {
-			timeZone: chat.timezone,
+			timeZone: 'UTC',
 			month: 'long',
 			year: 'numeric',
-		}).format(now);
+		}).format(monthDate);
 
 		await sendTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
@@ -80,6 +86,10 @@ Usa /games para añadir el primer juego.`,
 			},
 		]),
 	};
+
+	await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_TYPE', {
+		workDate,
+	});
 
 	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'Elige un juego:', keyboard);
 }

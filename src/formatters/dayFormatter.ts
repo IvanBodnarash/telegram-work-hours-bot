@@ -102,12 +102,17 @@ No hay juegos.`,
 
 	const hoursLines: string[] = [];
 	let totalMinutes = 0;
+	let hasNightMinutes = false;
 
 	for (const session of mergedSessions) {
 		const formatted = formatWorkSession(session.start, session.end, chat.night_start);
 
 		hoursLines.push(...formatted.lines);
 		totalMinutes += formatted.totalMinutes;
+
+		if (formatted.hasNightMinutes) {
+			hasNightMinutes = true;
+		}
 	}
 
 	let text = `<u>${formattedDate} •${capitalize(weekday)}•</u>
@@ -115,12 +120,19 @@ No hay juegos.`,
 ${gamesText}`;
 
 	if (hoursLines.length > 0) {
-		text += `
+		if (hasNightMinutes) {
+			text += `
 
 <u>⌛ Horas ⏳</u>
 ${hoursLines.join('\n')}
 
 <b>Total: ${minutesToDuration(totalMinutes)}</b>`;
+		} else {
+			text += `
+
+<u>⌛ Horas ⏳</u>
+<b>${minutesToDuration(totalMinutes)}</b>`;
+		}
 	}
 
 	return {

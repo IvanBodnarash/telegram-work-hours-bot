@@ -99,3 +99,35 @@ export function getMonthWeeks(timezone: string): string[][] {
 
 	return weeks;
 }
+
+export function getDateWithOffset(timezone: string, offsetDays: number): string {
+	const currentDate = getCurrentDate(timezone);
+
+	const [year, month, day] = currentDate.split('-').map(Number);
+
+	const date = new Date(Date.UTC(year, month - 1, day));
+
+	date.setUTCDate(date.getUTCDate() + offsetDays);
+
+	return date.toISOString().slice(0, 10);
+}
+
+export function parseDisplayDate(value: string): string | null {
+	const match = value.trim().match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+
+	if (!match) {
+		return null;
+	}
+
+	const day = Number(match[1]);
+	const month = Number(match[2]);
+	const year = Number(match[3]);
+
+	const date = new Date(Date.UTC(year, month - 1, day));
+
+	if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+		return null;
+	}
+
+	return [String(year).padStart(4, '0'), String(month).padStart(2, '0'), String(day).padStart(2, '0')].join('-');
+}

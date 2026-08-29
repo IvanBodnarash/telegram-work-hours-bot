@@ -1,6 +1,7 @@
 export interface FormattedSession {
 	lines: string[];
 	totalMinutes: number;
+	hasNightMinutes: boolean;
 }
 
 export interface TimeRange {
@@ -38,6 +39,7 @@ export function formatWorkSession(clockIn: string, clockOut: string, nightStart:
 		return {
 			lines: [],
 			totalMinutes: 0,
+			hasNightMinutes: false,
 		};
 	}
 
@@ -48,6 +50,7 @@ export function formatWorkSession(clockIn: string, clockOut: string, nightStart:
 		return {
 			lines: [`${clockIn}-${clockOut} = <b>${minutesToDuration(totalMinutes)}</b>`],
 			totalMinutes,
+			hasNightMinutes: false,
 		};
 	}
 
@@ -56,6 +59,7 @@ export function formatWorkSession(clockIn: string, clockOut: string, nightStart:
 		return {
 			lines: [`🌙${clockIn}-${clockOut} = <b>${minutesToDuration(totalMinutes)}</b>`],
 			totalMinutes,
+			hasNightMinutes: true,
 		};
 	}
 
@@ -69,6 +73,7 @@ export function formatWorkSession(clockIn: string, clockOut: string, nightStart:
 			`🌙${nightStart}-${clockOut} = <b>${minutesToDuration(nightMinutes)}</b>`,
 		],
 		totalMinutes,
+		hasNightMinutes: true,
 	};
 }
 

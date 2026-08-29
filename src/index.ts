@@ -22,7 +22,7 @@ import { getMonthEmojiByDate } from './services/monthSettingsService';
 import { handleToday } from './handlers/today';
 import { handleWeek } from './handlers/week';
 import { handleMonth } from './handlers/month';
-import { handleAdd } from './handlers/add';
+import { handleAdd, startAddForDate } from './handlers/add';
 import { handleGames } from './handlers/games';
 import { handleEdit } from './handlers/edit';
 import { handleState } from './handlers/state';
@@ -30,7 +30,7 @@ import { handleIn } from './handlers/in';
 import { handleOut } from './handlers/out';
 import { formatDay } from './formatters/dayFormatter';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
-import { getCurrentDate, getCurrentWeekDates, getMonthWeeks } from './utils/date';
+import { getCurrentDate, getCurrentWeekDates, getDateWithOffset, getMonthWeeks } from './utils/date';
 import { minutesToDuration } from './utils/time';
 
 interface Env {
@@ -114,16 +114,22 @@ export default {
 
 				const data = chatState.data ? JSON.parse(chatState.data) : null;
 
-				if (!data?.gameTypeId || !data?.scheduledTime || !data?.clientName) {
+				if (!data?.gameTypeId || !data?.scheduledTime || !data?.clientName || !data?.workDate) {
 					await clearChatState(env.DB, chat.id);
 					return new Response('OK');
 				}
 
-				const workDate = getCurrentDate(chat.timezone);
+				const workDay = await getOrCreateWorkDay(env.DB, chat.id, data.workDate);
 
-				const workDay = await getOrCreateWorkDay(env.DB, chat.id, workDate);
+				const game = await createGame(env.DB, workDay.id, data.gameTypeId, data.scheduledTime, data.clientName);
 
-				await createGame(env.DB, workDay.id, data.gameTypeId, data.scheduledTime, data.clientName);
+				if (data.clockIn && data.clockOut) {
+					const session = await createWorkSession(env.DB, workDay.id, data.clockIn);
+
+					await closeWorkSession(env.DB, session.id, data.clockOut);
+
+					await attachGameToSession(env.DB, game.id, session.id);
+				}
 
 				await clearChatState(env.DB, chat.id);
 
@@ -149,6 +155,52 @@ ${gameType?.emoji ?? ''} ${gameType?.name ?? ''} |${data.scheduledTime}| (${data
 				return new Response('OK');
 			}
 
+			const addDateMatch = callback.data.match(/^date:add:(today|yesterday|before_yesterday)$/);
+
+			if (addDateMatch) {
+				const choice = addDateMatch[1];
+
+				let offset = 0;
+
+				if (choice === 'yesterday') {
+					offset = -1;
+				}
+
+				if (choice === 'before_yesterday') {
+					offset = -2;
+				}
+
+				const workDate = getDateWithOffset(chat.timezone, offset);
+
+				await startAddForDate({
+					env,
+					chat,
+					telegramChatId,
+					telegramThreadId,
+					workDate,
+				});
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'date:add:custom') {
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_ADD_DATE');
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Escribe la fecha.
+
+Formato: DD.MM.YYYY
+
+Por ejemplo:
+22.08.2026`,
+				);
+
+				return new Response('OK');
+			}
+
 			const gameTypeMatch = callback.data.match(/^add_game:(\d+)$/);
 
 			if (gameTypeMatch) {
@@ -162,8 +214,22 @@ ${gameType?.emoji ?? ''} ${gameType?.name ?? ''} |${data.scheduledTime}| (${data
 					return new Response('OK');
 				}
 
+				const chatState = await getChatState(env.DB, chat.id);
+
+				if (!chatState || chatState.state !== 'WAITING_FOR_GAME_TYPE') {
+					return new Response('OK');
+				}
+
+				const stateData = chatState.data ? JSON.parse(chatState.data) : null;
+
+				if (!stateData?.workDate) {
+					await clearChatState(env.DB, chat.id);
+					return new Response('OK');
+				}
+
 				await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_TIME', {
 					gameTypeId: gameType.id,
+					workDate: stateData.workDate,
 				});
 
 				await sendTelegramMessage(

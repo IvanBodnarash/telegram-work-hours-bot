@@ -4,8 +4,10 @@ import { attachGameToSession, updateGameClientName, updateGameScheduledTime } fr
 import { createGameType, getGameTypeById } from '../services/gameTypeService';
 import { createMonthSettings } from '../services/monthSettingsService';
 import { closeWorkSession, createWorkSession, updateWorkSessionClockIn, updateWorkSessionClockOut } from '../services/workSessionService';
-
+import { getCurrentDate, parseDisplayDate } from '../utils/date';
 import { sendTelegramMessage } from '../utils/telegram';
+import { timeToMinutes } from '../utils/time';
+import { startAddForDate } from './add';
 
 interface Env {
 	DB: D1Database;
@@ -50,9 +52,9 @@ export async function handleState({ env, chat, telegramChatId, telegramThreadId,
 	if (chatState.state === 'WAITING_FOR_MONTH_EMOJI') {
 		const data = chatState.data ? JSON.parse(chatState.data) : null;
 
-		if (!data) {
+		if (!data?.year || !data?.month) {
 			await clearChatState(env.DB, chat.id);
-			return false;
+			return true;
 		}
 
 		const emoji = text.trim();
@@ -65,16 +67,21 @@ export async function handleState({ env, chat, telegramChatId, telegramThreadId,
 
 		await createMonthSettings(env.DB, chat.id, data.year, data.month, emoji);
 
+		const workDate = data.workDate;
+
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`✅ Emoji guardado: ${emoji}
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Emoji guardado: ${emoji}`);
 
-Ahora podemos añadir un juego.`,
-		);
+		if (workDate) {
+			await startAddForDate({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+				workDate,
+			});
+		}
 
 		return true;
 	}
@@ -163,6 +170,7 @@ Usa el formato HH:MM, por ejemplo:
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_CLIENT', {
 			gameTypeId: data.gameTypeId,
 			scheduledTime: time,
+			workDate: data.workDate,
 		});
 
 		await sendTelegramMessage(
@@ -180,7 +188,7 @@ Usa el formato HH:MM, por ejemplo:
 	if (chatState.state === 'WAITING_FOR_GAME_CLIENT') {
 		const data = chatState.data ? JSON.parse(chatState.data) : null;
 
-		if (!data?.gameTypeId || !data?.scheduledTime) {
+		if (!data?.gameTypeId || !data?.scheduledTime || !data?.workDate) {
 			await clearChatState(env.DB, chat.id);
 			return true;
 		}
@@ -188,7 +196,29 @@ Usa el formato HH:MM, por ejemplo:
 		const clientName = text.trim();
 
 		if (!clientName) {
-			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Escribe un nombre válido.');
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ El nombre no puede estar vacío.');
+
+			return true;
+		}
+
+		const today = getCurrentDate(chat.timezone);
+
+		if (data.workDate !== today) {
+			await setChatState(env.DB, chat.id, 'WAITING_FOR_PAST_GAME_CLOCK_IN', {
+				gameTypeId: data.gameTypeId,
+				scheduledTime: data.scheduledTime,
+				clientName,
+				workDate: data.workDate,
+			});
+
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`Hora de entrada:
+
+Formato: HH:MM`,
+			);
 
 			return true;
 		}
@@ -197,9 +227,6 @@ Usa el formato HH:MM, por ejemplo:
 
 		if (!gameType) {
 			await clearChatState(env.DB, chat.id);
-
-			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
-
 			return true;
 		}
 
@@ -207,13 +234,18 @@ Usa el formato HH:MM, por ejemplo:
 			gameTypeId: data.gameTypeId,
 			scheduledTime: data.scheduledTime,
 			clientName,
+			workDate: data.workDate,
 		});
+
+		const [year, month, day] = data.workDate.split('-');
 
 		await sendTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
 			telegramThreadId,
 			`${gameType.emoji} ${gameType.name} |${data.scheduledTime}| (${clientName})
+
+📅 ${day}.${month}.${year}
 
 ¿Guardar?`,
 			{
@@ -425,6 +457,158 @@ Usa el formato HH:MM, por ejemplo:
 		await clearChatState(env.DB, chat.id);
 
 		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida actualizada: ${time}`);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_ADD_DATE') {
+		const workDate = parseDisplayDate(text);
+
+		if (!workDate) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Fecha no válida.
+
+Usa el formato DD.MM.YYYY.
+
+Por ejemplo:
+22.08.2026`,
+			);
+
+			return true;
+		}
+
+		await clearChatState(env.DB, chat.id);
+
+		await startAddForDate({
+			env,
+			chat,
+			telegramChatId,
+			telegramThreadId,
+			workDate,
+		});
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_PAST_GAME_CLOCK_IN') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.gameTypeId || !data?.scheduledTime || !data?.clientName || !data?.workDate) {
+			await clearChatState(env.DB, chat.id);
+			return true;
+		}
+
+		const clockIn = text.trim();
+
+		if (!isValidTime(clockIn)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Hora no válida.
+
+Usa el formato HH:MM, por ejemplo:
+10:15`,
+			);
+
+			return true;
+		}
+
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_PAST_GAME_CLOCK_OUT', {
+			...data,
+			clockIn,
+		});
+
+		await sendTelegramMessage(
+			env.TELEGRAM_BOT_TOKEN,
+			telegramChatId,
+			telegramThreadId,
+			`Hora de salida:
+
+Formato: HH:MM`,
+		);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_PAST_GAME_CLOCK_OUT') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.gameTypeId || !data?.scheduledTime || !data?.clientName || !data?.workDate || !data?.clockIn) {
+			await clearChatState(env.DB, chat.id);
+			return true;
+		}
+
+		const clockOut = text.trim();
+
+		if (!isValidTime(clockOut)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Hora no válida.
+
+Usa el formato HH:MM, por ejemplo:
+18:30`,
+			);
+
+			return true;
+		}
+
+		if (timeToMinutes(clockOut) < timeToMinutes(data.clockIn)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				'❌ La salida no puede ser anterior a la entrada.',
+			);
+
+			return true;
+		}
+
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_CONFIRMATION', {
+			...data,
+			clockOut,
+		});
+
+		const gameType = await getGameTypeById(env.DB, data.gameTypeId, chat.id);
+
+		if (!gameType) {
+			await clearChatState(env.DB, chat.id);
+			return true;
+		}
+
+		const [year, month, day] = data.workDate.split('-');
+
+		await sendTelegramMessage(
+			env.TELEGRAM_BOT_TOKEN,
+			telegramChatId,
+			telegramThreadId,
+			`${gameType.emoji} ${gameType.name} |${data.scheduledTime}| (${data.clientName})
+
+📅 ${day}.${month}.${year}
+⬇️ ${data.clockIn}
+⬆️ ${clockOut}
+
+¿Guardar?`,
+			{
+				inline_keyboard: [
+					[
+						{
+							text: '✅ Guardar',
+							callback_data: 'add_game:save',
+						},
+						{
+							text: '❌ Cancelar',
+							callback_data: 'add_game:cancel',
+						},
+					],
+				],
+			},
+		);
 
 		return true;
 	}

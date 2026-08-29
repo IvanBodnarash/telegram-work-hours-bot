@@ -4,21 +4,38 @@ export async function createGame(
 	gameTypeId: number,
 	scheduledTime: string,
 	clientName: string,
-): Promise<void> {
-	await db
+): Promise<Game> {
+	const game = await db
 		.prepare(
 			`
-      INSERT INTO games (
-        work_day_id,
-        game_type_id,
-        scheduled_time,
-        client_name
-      )
-      VALUES (?, ?, ?, ?)
-    `,
+			INSERT INTO games (
+				work_day_id,
+				game_type_id,
+				scheduled_time,
+				client_name
+			)
+			VALUES (?, ?, ?, ?)
+			RETURNING *
+		`,
 		)
 		.bind(workDayId, gameTypeId, scheduledTime, clientName)
-		.run();
+		.first<Game>();
+
+	if (!game) {
+		throw new Error('Failed to create game');
+	}
+
+	return game;
+}
+
+export interface Game {
+	id: number;
+	work_day_id: number;
+	game_type_id: number;
+	work_session_id: number | null;
+	scheduled_time: string;
+	client_name: string;
+	created_at: string;
 }
 
 export interface GameWithType {
