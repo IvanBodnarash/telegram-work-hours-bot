@@ -9,6 +9,19 @@ export interface TimeRange {
 	end: string;
 }
 
+export interface GameTimeRange {
+	gameId: number;
+	start: string;
+	end: string;
+	scheduledTime: string;
+}
+
+export interface GameTimeGroup {
+	gameIds: number[];
+	start: string;
+	end: string;
+}
+
 export function timeToMinutes(time: string): number {
 	const [hours, minutes] = time.split(':').map(Number);
 
@@ -106,18 +119,6 @@ export function mergeTimeRanges(ranges: TimeRange[]): TimeRange[] {
 	return merged;
 }
 
-export interface GameTimeRange {
-	gameId: number;
-	start: string;
-	end: string;
-}
-
-export interface GameTimeGroup {
-	gameIds: number[];
-	start: string;
-	end: string;
-}
-
 export function groupContinuousGames(ranges: GameTimeRange[]): GameTimeGroup[] {
 	if (ranges.length === 0) {
 		return [];
@@ -125,9 +126,13 @@ export function groupContinuousGames(ranges: GameTimeRange[]): GameTimeGroup[] {
 
 	const sorted = [...ranges].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
 
-	const groups: GameTimeGroup[] = [
+	const groups: {
+		games: GameTimeRange[];
+		start: string;
+		end: string;
+	}[] = [
 		{
-			gameIds: [sorted[0].gameId],
+			games: [sorted[0]],
 			start: sorted[0].start,
 			end: sorted[0].end,
 		},
@@ -138,22 +143,31 @@ export function groupContinuousGames(ranges: GameTimeRange[]): GameTimeGroup[] {
 		const lastGroup = groups[groups.length - 1];
 
 		const currentStart = timeToMinutes(current.start);
+
 		const lastEnd = timeToMinutes(lastGroup.end);
 
 		if (currentStart <= lastEnd) {
-			lastGroup.gameIds.push(current.gameId);
+			lastGroup.games.push(current);
 
 			if (timeToMinutes(current.end) > timeToMinutes(lastGroup.end)) {
 				lastGroup.end = current.end;
 			}
 		} else {
 			groups.push({
-				gameIds: [current.gameId],
+				games: [current],
 				start: current.start,
 				end: current.end,
 			});
 		}
 	}
 
-	return groups;
+	return groups.map((group) => {
+		const gamesByScheduledTime = [...group.games].sort((a, b) => timeToMinutes(a.scheduledTime) - timeToMinutes(b.scheduledTime));
+
+		return {
+			gameIds: gamesByScheduledTime.map((game) => game.gameId),
+			start: group.start,
+			end: group.end,
+		};
+	});
 }

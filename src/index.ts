@@ -24,10 +24,10 @@ import { handleWeek } from './handlers/week';
 import { handleMonth } from './handlers/month';
 import { handleAdd, startAddForDate } from './handlers/add';
 import { handleGames } from './handlers/games';
-import { handleEdit } from './handlers/edit';
+import { handleEdit, startEditForDate } from './handlers/edit';
 import { handleState } from './handlers/state';
-import { handleIn } from './handlers/in';
-import { handleOut } from './handlers/out';
+import { handleIn, startInForDate } from './handlers/in';
+import { handleOut, startOutForDate } from './handlers/out';
 import { formatDay } from './formatters/dayFormatter';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
 import { getCurrentDate, getCurrentWeekDates, getDateWithOffset, getMonthWeeks } from './utils/date';
@@ -183,6 +183,62 @@ ${gameType?.emoji ?? ''} ${gameType?.name ?? ''} |${data.scheduledTime}| (${data
 				return new Response('OK');
 			}
 
+			const inDateMatch = callback.data.match(/^date:in:(today|yesterday|before_yesterday)$/);
+
+			if (inDateMatch) {
+				const choice = inDateMatch[1];
+
+				let offset = 0;
+
+				if (choice === 'yesterday') {
+					offset = -1;
+				}
+
+				if (choice === 'before_yesterday') {
+					offset = -2;
+				}
+
+				const workDate = getDateWithOffset(chat.timezone, offset);
+
+				await startInForDate({
+					env,
+					chat,
+					telegramChatId,
+					telegramThreadId,
+					workDate,
+				});
+
+				return new Response('OK');
+			}
+
+			const outDateMatch = callback.data.match(/^date:out:(today|yesterday|before_yesterday)$/);
+
+			if (outDateMatch) {
+				const choice = outDateMatch[1];
+
+				let offset = 0;
+
+				if (choice === 'yesterday') {
+					offset = -1;
+				}
+
+				if (choice === 'before_yesterday') {
+					offset = -2;
+				}
+
+				const workDate = getDateWithOffset(chat.timezone, offset);
+
+				await startOutForDate({
+					env,
+					chat,
+					telegramChatId,
+					telegramThreadId,
+					workDate,
+				});
+
+				return new Response('OK');
+			}
+
 			if (callback.data === 'date:add:custom') {
 				await setChatState(env.DB, chat.id, 'WAITING_FOR_ADD_DATE');
 
@@ -196,6 +252,36 @@ Formato: DD.MM.YYYY
 
 Por ejemplo:
 22.08.2026`,
+				);
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'date:in:custom') {
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_IN_DATE');
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Escribe la fecha.
+
+Formato: DD.MM.YYYY`,
+				);
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'date:out:custom') {
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_OUT_DATE');
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Escribe la fecha.
+
+Formato: DD.MM.YYYY`,
 				);
 
 				return new Response('OK');
@@ -246,10 +332,11 @@ Formato: HH:MM`,
 				return new Response('OK');
 			}
 
-			const inGameMatch = callback.data.match(/^in:game:(\d+)$/);
+			const inGameMatch = callback.data.match(/^in:game:(\d+):(\d{4}-\d{2}-\d{2})$/);
 
 			if (inGameMatch) {
 				const gameId = Number(inGameMatch[1]);
+				const workDate = inGameMatch[2];
 
 				const game = await getGameById(env.DB, gameId, chat.id);
 
@@ -262,6 +349,7 @@ Formato: HH:MM`,
 				await setChatState(env.DB, chat.id, 'WAITING_FOR_IN_TIME', {
 					gameId: game.id,
 					workDayId: game.work_day_id,
+					workDate,
 				});
 
 				await sendTelegramMessage(
@@ -459,6 +547,49 @@ Selecciona el nuevo juego:`,
 					{
 						inline_keyboard: rows,
 					},
+				);
+
+				return new Response('OK');
+			}
+
+			const editDateMatch = callback.data.match(/^date:edit:(today|yesterday|before_yesterday)$/);
+
+			if (editDateMatch) {
+				const choice = editDateMatch[1];
+
+				let offset = 0;
+
+				if (choice === 'yesterday') {
+					offset = -1;
+				}
+
+				if (choice === 'before_yesterday') {
+					offset = -2;
+				}
+
+				const workDate = getDateWithOffset(chat.timezone, offset);
+
+				await startEditForDate({
+					env,
+					chat,
+					telegramChatId,
+					telegramThreadId,
+					workDate,
+				});
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'date:edit:custom') {
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_DATE');
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Escribe la fecha.
+
+Formato: DD.MM.YYYY`,
 				);
 
 				return new Response('OK');

@@ -60,6 +60,7 @@ No hay juegos.`,
 			gameId: game.id,
 			start: game.clock_in!,
 			end: game.clock_out!,
+			scheduledTime: game.scheduled_time,
 		}));
 
 	const continuousGroups = groupContinuousGames(gameRanges);

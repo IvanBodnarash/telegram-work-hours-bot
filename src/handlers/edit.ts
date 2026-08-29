@@ -5,6 +5,7 @@ import { sendTelegramMessage } from '../utils/telegram';
 
 import { getWorkDayByDate } from '../services/workDayService';
 import { getGamesByWorkDay } from '../services/gameService';
+import { getDatePickerKeyboard } from '../utils/datePicker';
 
 interface Env {
 	DB: D1Database;
@@ -19,12 +20,22 @@ interface HandleEditParams {
 }
 
 export async function handleEdit({ env, chat, telegramChatId, telegramThreadId }: HandleEditParams): Promise<void> {
-	const workDate = getCurrentDate(chat.timezone);
+	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Para qué día?', getDatePickerKeyboard('edit'));
+}
 
+export async function startEditForDate({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	workDate,
+}: HandleEditParams & {
+	workDate: string;
+}): Promise<void> {
 	const workDay = await getWorkDayByDate(env.DB, chat.id, workDate);
 
 	if (!workDay) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para editar hoy.');
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para editar este día.');
 
 		return;
 	}
@@ -32,7 +43,7 @@ export async function handleEdit({ env, chat, telegramChatId, telegramThreadId }
 	const games = await getGamesByWorkDay(env.DB, workDay.id as number);
 
 	if (games.length === 0) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para editar hoy.');
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para editar este día.');
 
 		return;
 	}
@@ -52,5 +63,7 @@ export async function handleEdit({ env, chat, telegramChatId, telegramThreadId }
 		inline_keyboard: rows,
 	};
 
-	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Qué juego quieres editar?', keyboard);
+	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Qué juego quieres editar?', {
+		inline_keyboard: rows,
+	});
 }

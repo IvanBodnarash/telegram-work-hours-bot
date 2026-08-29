@@ -8,6 +8,9 @@ import { getCurrentDate, parseDisplayDate } from '../utils/date';
 import { sendTelegramMessage } from '../utils/telegram';
 import { timeToMinutes } from '../utils/time';
 import { startAddForDate } from './add';
+import { startEditForDate } from './edit';
+import { startInForDate } from './in';
+import { startOutForDate } from './out';
 
 interface Env {
 	DB: D1Database;
@@ -609,6 +612,93 @@ Usa el formato HH:MM, por ejemplo:
 				],
 			},
 		);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_IN_DATE') {
+		const workDate = parseDisplayDate(text);
+
+		if (!workDate) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Fecha no válida.
+
+Usa el formato DD.MM.YYYY.`,
+			);
+
+			return true;
+		}
+
+		await clearChatState(env.DB, chat.id);
+
+		await startInForDate({
+			env,
+			chat,
+			telegramChatId,
+			telegramThreadId,
+			workDate,
+		});
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_OUT_DATE') {
+		const workDate = parseDisplayDate(text);
+
+		if (!workDate) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Fecha no válida.
+
+Usa el formato DD.MM.YYYY.`,
+			);
+
+			return true;
+		}
+
+		await clearChatState(env.DB, chat.id);
+
+		await startOutForDate({
+			env,
+			chat,
+			telegramChatId,
+			telegramThreadId,
+			workDate,
+		});
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_EDIT_DATE') {
+		const workDate = parseDisplayDate(text);
+
+		if (!workDate) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Fecha no válida.
+
+Usa el formato DD.MM.YYYY.`,
+			);
+
+			return true;
+		}
+
+		await clearChatState(env.DB, chat.id);
+
+		await startEditForDate({
+			env,
+			chat,
+			telegramChatId,
+			telegramThreadId,
+			workDate,
+		});
 
 		return true;
 	}
