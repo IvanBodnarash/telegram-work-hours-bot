@@ -3,7 +3,7 @@ import { getChatState, clearChatState, setChatState } from '../services/chatStat
 import { attachGameToSession, updateGameClientName, updateGameScheduledTime } from '../services/gameService';
 import { createGameType, getGameTypeById } from '../services/gameTypeService';
 import { createMonthSettings } from '../services/monthSettingsService';
-import { closeWorkSession, createWorkSession } from '../services/workSessionService';
+import { closeWorkSession, createWorkSession, updateWorkSessionClockIn, updateWorkSessionClockOut } from '../services/workSessionService';
 
 import { sendTelegramMessage } from '../utils/telegram';
 
@@ -359,6 +359,72 @@ Usa el formato HH:MM, por ejemplo:
 		await clearChatState(env.DB, chat.id);
 
 		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Cliente actualizado: ${clientName}`);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_EDIT_CLOCK_IN') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.sessionId) {
+			await clearChatState(env.DB, chat.id);
+			return true;
+		}
+
+		const time = text.trim();
+
+		if (!isValidTime(time)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Hora no válida.
+
+Usa el formato HH:MM, por ejemplo:
+12:30`,
+			);
+
+			return true;
+		}
+
+		await updateWorkSessionClockIn(env.DB, data.sessionId, time);
+
+		await clearChatState(env.DB, chat.id);
+
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Entrada actualizada: ${time}`);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_EDIT_CLOCK_OUT') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.sessionId) {
+			await clearChatState(env.DB, chat.id);
+			return true;
+		}
+
+		const time = text.trim();
+
+		if (!isValidTime(time)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Hora no válida.
+
+Usa el formato HH:MM, por ejemplo:
+18:45`,
+			);
+
+			return true;
+		}
+
+		await updateWorkSessionClockOut(env.DB, data.sessionId, time);
+
+		await clearChatState(env.DB, chat.id);
+
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida actualizada: ${time}`);
 
 		return true;
 	}

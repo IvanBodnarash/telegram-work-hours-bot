@@ -10,7 +10,7 @@ import {
 	updateGameClientName,
 	updateGameType,
 } from './services/gameService';
-import { closeWorkSession, createWorkSession } from './services/workSessionService';
+import { closeWorkSession, createWorkSession, updateWorkSessionClockIn, updateWorkSessionClockOut } from './services/workSessionService';
 import { getMonthEmojiByDate } from './services/monthSettingsService';
 import { handleToday } from './handlers/today';
 import { handleWeek } from './handlers/week';
@@ -415,6 +415,68 @@ Selecciona el nuevo juego:`,
 					`✅ Juego actualizado:
 
 ${gameType.emoji} ${gameType.name}`,
+				);
+
+				return new Response('OK');
+			}
+
+			const editInMatch = callback.data.match(/^edit:in:(\d+)$/);
+
+			if (editInMatch) {
+				const gameId = Number(editInMatch[1]);
+
+				const game = await getGameById(env.DB, gameId, chat.id);
+
+				if (!game || !game.work_session_id || !game.clock_in) {
+					await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Este juego no tiene hora de entrada.');
+
+					return new Response('OK');
+				}
+
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_CLOCK_IN', {
+					sessionId: game.work_session_id,
+				});
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Entrada actual: ${game.clock_in}
+
+Escribe la nueva hora.
+
+Formato: HH:MM`,
+				);
+
+				return new Response('OK');
+			}
+
+			const editOutMatch = callback.data.match(/^edit:out:(\d+)$/);
+
+			if (editOutMatch) {
+				const gameId = Number(editOutMatch[1]);
+
+				const game = await getGameById(env.DB, gameId, chat.id);
+
+				if (!game || !game.work_session_id) {
+					await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Este juego no tiene sesión de trabajo.');
+
+					return new Response('OK');
+				}
+
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_CLOCK_OUT', {
+					sessionId: game.work_session_id,
+				});
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Salida actual: ${game.clock_out ?? '—'}
+
+Escribe la nueva hora.
+
+Formato: HH:MM`,
 				);
 
 				return new Response('OK');

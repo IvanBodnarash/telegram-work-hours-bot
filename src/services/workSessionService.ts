@@ -55,3 +55,29 @@ export async function closeWorkSession(db: D1Database, sessionId: number, clockO
 		.bind(clockOut, sessionId)
 		.run();
 }
+
+export async function updateWorkSessionClockIn(db: D1Database, sessionId: number, clockIn: string): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE work_sessions
+			SET clock_in = ?
+			WHERE id = ?
+		`,
+		)
+		.bind(clockIn, sessionId)
+		.run();
+}
+
+export async function updateWorkSessionClockOut(db: D1Database, sessionId: number, clockOut: string): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE work_sessions
+			SET clock_out = ?
+			WHERE id = ?
+		`,
+		)
+		.bind(clockOut, sessionId)
+		.run();
+}
