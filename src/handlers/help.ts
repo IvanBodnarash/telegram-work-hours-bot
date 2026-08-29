@@ -49,6 +49,12 @@ Gestionar los tipos de juego.
 <b>/settings</b>
 Cambiar ajustes como la hora nocturna o el emoji del mes.
 
+<b>/export</b>
+Exportar los datos del mes actual en CSV.
+
+<b>/stats</b>
+Ver estadísticas del mes actual.
+
 🌙 Las horas nocturnas se calculan desde la hora configurada en /settings.`,
 		undefined,
 		'HTML',

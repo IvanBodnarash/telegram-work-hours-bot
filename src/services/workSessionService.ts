@@ -109,3 +109,18 @@ export async function deleteWorkSessionIfUnused(db: D1Database, sessionId: numbe
 		.bind(sessionId)
 		.run();
 }
+
+export async function getOpenWorkSessions(db: D1Database, workDayId: number) {
+	return db
+		.prepare(
+			`
+			SELECT *
+			FROM work_sessions
+			WHERE work_day_id = ?
+			AND clock_out IS NULL
+			ORDER BY clock_in
+		`,
+		)
+		.bind(workDayId)
+		.all();
+}

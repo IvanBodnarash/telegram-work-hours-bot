@@ -15,6 +15,8 @@ import { handleHelp } from './handlers/help';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
 
 import { handleCallback } from './callbacks';
+import { handleExport } from './handlers/export';
+import { handleStats } from './handlers/stats';
 
 interface Env {
 	DB: D1Database;
@@ -233,6 +235,28 @@ export default {
 
 		if (text === '/help') {
 			await handleHelp({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
+		if (text === '/export') {
+			await handleExport({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
+		if (text === '/stats') {
+			await handleStats({
 				env,
 				chat,
 				telegramChatId,

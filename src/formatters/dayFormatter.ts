@@ -14,6 +14,7 @@ interface FormatDayParams {
 export interface FormattedDay {
 	text: string;
 	totalMinutes: number;
+	nightMinutes: number;
 }
 
 function escapeHtml(value: string): string {
@@ -40,6 +41,7 @@ export async function formatDay({ db, chat, workDate }: FormatDayParams): Promis
 
 No hay juegos.`,
 			totalMinutes: 0,
+			nightMinutes: 0,
 		};
 	}
 
@@ -51,6 +53,7 @@ No hay juegos.`,
 
 No hay juegos.`,
 			totalMinutes: 0,
+			nightMinutes: 0,
 		};
 	}
 
@@ -103,6 +106,7 @@ No hay juegos.`,
 
 	const hoursLines: string[] = [];
 	let totalMinutes = 0;
+	let nightMinutes = 0;
 	let hasNightMinutes = false;
 
 	for (const session of mergedSessions) {
@@ -110,6 +114,7 @@ No hay juegos.`,
 
 		hoursLines.push(...formatted.lines);
 		totalMinutes += formatted.totalMinutes;
+		nightMinutes += formatted.nightMinutes;
 
 		if (formatted.hasNightMinutes) {
 			hasNightMinutes = true;
@@ -139,6 +144,7 @@ ${hoursLines.join('\n')}
 	return {
 		text,
 		totalMinutes,
+		nightMinutes,
 	};
 }
 

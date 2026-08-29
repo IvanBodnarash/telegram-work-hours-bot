@@ -3,14 +3,22 @@ import { getChatState, clearChatState, setChatState } from '../services/chatStat
 import { attachGameToSession, updateGameClientName, updateGameScheduledTime } from '../services/gameService';
 import { createGameType, getGameTypeById } from '../services/gameTypeService';
 import { createMonthSettings, getMonthSettings, updateMonthEmoji } from '../services/monthSettingsService';
-import { closeWorkSession, createWorkSession, updateWorkSessionClockIn, updateWorkSessionClockOut } from '../services/workSessionService';
+import {
+	closeWorkSession,
+	createWorkSession,
+	getOpenWorkSessions,
+	updateWorkSessionClockIn,
+	updateWorkSessionClockOut,
+} from '../services/workSessionService';
 import { getCurrentDate, parseDisplayDate } from '../utils/date';
 import { sendTelegramMessage } from '../utils/telegram';
 import { timeToMinutes } from '../utils/time';
 import { startAddForDate } from './add';
 import { startEditForDate } from './edit';
+import { exportMonth } from './export';
 import { startInForDate } from './in';
 import { startOutForDate } from './out';
+import { showMonthStats } from './stats';
 
 interface Env {
 	DB: D1Database;
@@ -294,6 +302,26 @@ Usa el formato HH:MM, por ejemplo:
 			return true;
 		}
 
+		const openSessions = await getOpenWorkSessions(env.DB, data.workDayId);
+
+		if (openSessions.results.length > 0) {
+			const openSession = openSessions.results[0] as {
+				id: number;
+				clock_in: string;
+			};
+
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`⚠️ Ya hay una sesión abierta desde ${openSession.clock_in}.
+
+Primero registra la salida con /out.`,
+			);
+
+			return true;
+		}
+
 		const session = await createWorkSession(env.DB, data.workDayId, time);
 
 		await attachGameToSession(env.DB, data.gameId, session.id);
@@ -324,6 +352,19 @@ Usa el formato HH:MM, por ejemplo:
 
 Usa el formato HH:MM, por ejemplo:
 17:30`,
+			);
+
+			return true;
+		}
+
+		if (data.clockIn && timeToMinutes(time) < timeToMinutes(data.clockIn)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ La hora de salida no puede ser anterior a la entrada.
+
+Entrada: ${data.clockIn}`,
 			);
 
 			return true;
@@ -759,6 +800,82 @@ Por ejemplo:
 		await clearChatState(env.DB, chat.id);
 
 		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Emoji actualizado: ${emoji}`);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_EXPORT_MONTH') {
+		const value = text.trim();
+
+		const match = value.match(/^(0[1-9]|1[0-2])\.(\d{4})$/);
+
+		if (!match) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Formato incorrecto.
+
+Usa MM.YYYY.
+
+Por ejemplo:
+07.2026`,
+			);
+
+			return true;
+		}
+
+		const month = Number(match[1]);
+		const year = Number(match[2]);
+
+		await clearChatState(env.DB, chat.id);
+
+		await exportMonth({
+			env,
+			chat,
+			telegramChatId,
+			telegramThreadId,
+			year,
+			month,
+		});
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_STATS_MONTH') {
+		const value = text.trim();
+
+		const match = value.match(/^(0[1-9]|1[0-2])\.(\d{4})$/);
+
+		if (!match) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Formato incorrecto.
+
+Usa MM.YYYY.
+
+Por ejemplo:
+07.2026`,
+			);
+
+			return true;
+		}
+
+		const month = Number(match[1]);
+		const year = Number(match[2]);
+
+		await clearChatState(env.DB, chat.id);
+
+		await showMonthStats({
+			env,
+			chat,
+			telegramChatId,
+			telegramThreadId,
+			year,
+			month,
+		});
 
 		return true;
 	}

@@ -58,3 +58,39 @@ export async function answerCallbackQuery(botToken: string, callbackQueryId: str
 		}),
 	});
 }
+
+export async function sendTelegramDocument(
+	botToken: string,
+	chatId: number,
+	threadId: number | null,
+	filename: string,
+	content: string,
+	caption?: string,
+): Promise<void> {
+	const formData = new FormData();
+
+	formData.append('chat_id', String(chatId));
+
+	if (threadId !== null) {
+		formData.append('message_thread_id', String(threadId));
+	}
+
+	if (caption) {
+		formData.append('caption', caption);
+	}
+
+	const file = new Blob([content], {
+		type: 'text/csv;charset=utf-8',
+	});
+
+	formData.append('document', file, filename);
+
+	const response = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
+		method: 'POST',
+		body: formData,
+	});
+
+	if (!response.ok) {
+		throw new Error(`Telegram sendDocument failed: ${await response.text()}`);
+	}
+}

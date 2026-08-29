@@ -2,8 +2,10 @@ import type { Chat } from '../services/chatService';
 
 import { handleAddCallbacks } from './addCallbacks';
 import { handleEditCallbacks } from './editCallbacks';
+import { handleExportCallbacks } from './exportCallbacks';
 import { handleReportCallbacks } from './reportCallbacks';
 import { handleSettingsCallbacks } from './settingsCallbacks';
+import { handleStatsCallbacks } from './statsCallbacks';
 import { handleWorkCallbacks } from './workCallbacks';
 
 interface Env {
@@ -51,6 +53,14 @@ export async function handleCallback({
 	}
 
 	if (await handleSettingsCallbacks(params)) {
+		return true;
+	}
+
+	if (await handleExportCallbacks(params)) {
+		return true;
+	}
+
+	if (await handleStatsCallbacks(params)) {
 		return true;
 	}
 

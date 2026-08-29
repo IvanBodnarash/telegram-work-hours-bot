@@ -1,6 +1,7 @@
 export interface FormattedSession {
 	lines: string[];
 	totalMinutes: number;
+	nightMinutes: number;
 	hasNightMinutes: boolean;
 }
 
@@ -52,31 +53,34 @@ export function formatWorkSession(clockIn: string, clockOut: string, nightStart:
 		return {
 			lines: [],
 			totalMinutes: 0,
+			nightMinutes: 0,
 			hasNightMinutes: false,
 		};
 	}
 
 	const totalMinutes = end - start;
 
-	// session before night_start
+	// Session entirely before night_start
 	if (end <= night) {
 		return {
 			lines: [`${clockIn}-${clockOut} = <b>${minutesToDuration(totalMinutes)}</b>`],
 			totalMinutes,
+			nightMinutes: 0,
 			hasNightMinutes: false,
 		};
 	}
 
-	// session began in the night
+	// Session entirely during night hours
 	if (start >= night) {
 		return {
 			lines: [`🌙${clockIn}-${clockOut} = <b>${minutesToDuration(totalMinutes)}</b>`],
 			totalMinutes,
+			nightMinutes: totalMinutes,
 			hasNightMinutes: true,
 		};
 	}
 
-	// session overlaped night_start
+	// Session crosses night_start
 	const dayMinutes = night - start;
 	const nightMinutes = end - night;
 
@@ -86,6 +90,7 @@ export function formatWorkSession(clockIn: string, clockOut: string, nightStart:
 			`🌙${nightStart}-${clockOut} = <b>${minutesToDuration(nightMinutes)}</b>`,
 		],
 		totalMinutes,
+		nightMinutes,
 		hasNightMinutes: true,
 	};
 }

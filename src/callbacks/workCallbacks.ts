@@ -4,7 +4,7 @@ import { getChatState, clearChatState, setChatState } from '../services/chatStat
 
 import { getGameById, attachGameToSession } from '../services/gameService';
 
-import { createWorkSession, closeWorkSession } from '../services/workSessionService';
+import { createWorkSession, closeWorkSession, getOpenWorkSessions } from '../services/workSessionService';
 
 import { startInForDate } from '../handlers/in';
 
@@ -197,6 +197,26 @@ Hora de entrada:`,
 			minute: '2-digit',
 			hour12: false,
 		}).format(new Date());
+
+		const openSessions = await getOpenWorkSessions(env.DB, data.workDayId);
+
+		if (openSessions.results.length > 0) {
+			const openSession = openSessions.results[0] as {
+				id: number;
+				clock_in: string;
+			};
+
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`⚠️ Ya hay una sesión abierta desde ${openSession.clock_in}.
+
+Primero registra la salida con /out.`,
+			);
+
+			return true;
+		}
 
 		const session = await createWorkSession(env.DB, data.workDayId, currentTime);
 

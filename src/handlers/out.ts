@@ -52,6 +52,7 @@ export async function startOutForDate({
 	await setChatState(env.DB, chat.id, 'WAITING_FOR_OUT_TIME', {
 		sessionId: session.id,
 		workDate,
+		clockIn: session.clock_in,
 	});
 
 	const today = getCurrentDate(chat.timezone);
