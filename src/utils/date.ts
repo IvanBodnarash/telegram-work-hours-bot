@@ -50,3 +50,52 @@ export function getCurrentWeekDates(timezone: string): string[] {
 
 	return dates;
 }
+
+export function getMonthWeeks(timezone: string): string[][] {
+	const now = new Date();
+
+	const local = new Intl.DateTimeFormat('en-CA', {
+		timeZone: timezone,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	}).format(now);
+
+	const [year, month] = local.split('-').map(Number);
+
+	const firstDay = new Date(Date.UTC(year, month - 1, 1));
+
+	const lastDay = new Date(Date.UTC(year, month, 0));
+
+	const firstWeekday = firstDay.getUTCDay();
+
+	const daysFromMonday = firstWeekday === 0 ? 6 : firstWeekday - 1;
+
+	const firstMonday = new Date(firstDay);
+
+	firstMonday.setUTCDate(firstDay.getUTCDate() - daysFromMonday);
+
+	const weeks: string[][] = [];
+
+	let currentMonday = new Date(firstMonday);
+
+	while (currentMonday <= lastDay) {
+		const week: string[] = [];
+
+		for (let i = 0; i < 7; i++) {
+			const current = new Date(currentMonday);
+
+			current.setUTCDate(currentMonday.getUTCDate() + i);
+
+			week.push(current.toISOString().slice(0, 10));
+		}
+
+		weeks.push(week);
+
+		currentMonday = new Date(currentMonday);
+
+		currentMonday.setUTCDate(currentMonday.getUTCDate() + 7);
+	}
+
+	return weeks;
+}
