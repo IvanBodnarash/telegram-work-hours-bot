@@ -45,3 +45,18 @@ export async function getMonthEmojiByDate(db: D1Database, chatId: number, workDa
 
 	return settings?.emoji ?? '🌴';
 }
+
+export async function updateMonthEmoji(db: D1Database, chatId: number, year: number, month: number, emoji: string): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE month_settings
+			SET emoji = ?
+			WHERE chat_id = ?
+			AND year = ?
+			AND month = ?
+		`,
+		)
+		.bind(emoji, chatId, year, month)
+		.run();
+}

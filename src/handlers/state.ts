@@ -2,7 +2,7 @@ import { updateNightStart, type Chat } from '../services/chatService';
 import { getChatState, clearChatState, setChatState } from '../services/chatStateService';
 import { attachGameToSession, updateGameClientName, updateGameScheduledTime } from '../services/gameService';
 import { createGameType, getGameTypeById } from '../services/gameTypeService';
-import { createMonthSettings } from '../services/monthSettingsService';
+import { createMonthSettings, getMonthSettings, updateMonthEmoji } from '../services/monthSettingsService';
 import { closeWorkSession, createWorkSession, updateWorkSessionClockIn, updateWorkSessionClockOut } from '../services/workSessionService';
 import { getCurrentDate, parseDisplayDate } from '../utils/date';
 import { sendTelegramMessage } from '../utils/telegram';
@@ -727,6 +727,38 @@ Por ejemplo:
 		await clearChatState(env.DB, chat.id);
 
 		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Inicio nocturno actualizado: ${time}`);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_SETTINGS_MONTH_EMOJI') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.year || !data?.month) {
+			await clearChatState(env.DB, chat.id);
+
+			return true;
+		}
+
+		const emoji = text.trim();
+
+		if (!isSingleEmoji(emoji)) {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Envía solo un emoji.');
+
+			return true;
+		}
+
+		const existing = await getMonthSettings(env.DB, chat.id, data.year, data.month);
+
+		if (existing) {
+			await updateMonthEmoji(env.DB, chat.id, data.year, data.month, emoji);
+		} else {
+			await createMonthSettings(env.DB, chat.id, data.year, data.month, emoji);
+		}
+
+		await clearChatState(env.DB, chat.id);
+
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Emoji actualizado: ${emoji}`);
 
 		return true;
 	}

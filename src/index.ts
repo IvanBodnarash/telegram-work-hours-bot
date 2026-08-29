@@ -4,7 +4,7 @@ import { getChatState, clearChatState, setChatState } from './services/chatState
 import { getOrCreateWorkDay } from './services/workDayService';
 import { createGame, getGameById, attachGameToSession, updateGameType, deleteGame } from './services/gameService';
 import { closeWorkSession, createWorkSession, deleteWorkSessionIfUnused } from './services/workSessionService';
-import { getMonthEmojiByDate } from './services/monthSettingsService';
+import { getMonthEmojiByDate, getMonthSettings } from './services/monthSettingsService';
 import { handleToday } from './handlers/today';
 import { handleWeek } from './handlers/week';
 import { handleMonth } from './handlers/month';
@@ -17,7 +17,7 @@ import { handleOut, startOutForDate } from './handlers/out';
 import { handleSettings } from './handlers/settings';
 import { formatDay } from './formatters/dayFormatter';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
-import { getCurrentWeekDates, getDateWithOffset, getMonthWeeks } from './utils/date';
+import { getCurrentDate, getCurrentWeekDates, getDateWithOffset, getMonthWeeks } from './utils/date';
 import { minutesToDuration } from './utils/time';
 
 interface Env {
@@ -1043,6 +1043,30 @@ ${separatorEmoji} TOTAL ${capitalize(monthName)}: <b>${minutesToDuration(totalMi
 Escribe la nueva hora.
 
 Formato: HH:MM`,
+				);
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'settings:month_emoji') {
+				const currentDate = getCurrentDate(chat.timezone);
+
+				const [year, month] = currentDate.split('-').map(Number);
+
+				const monthSettings = await getMonthSettings(env.DB, chat.id, year, month);
+
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_SETTINGS_MONTH_EMOJI', {
+					year,
+					month,
+				});
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Emoji actual: ${monthSettings?.emoji ?? '—'}
+
+Envía el nuevo emoji para este mes:`,
 				);
 
 				return new Response('OK');
