@@ -24,5 +24,5 @@ export async function handleToday({ env, chat, telegramChatId, telegramThreadId 
 		workDate,
 	});
 
-	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, day.text);
+	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, day.text, undefined, 'HTML');
 }

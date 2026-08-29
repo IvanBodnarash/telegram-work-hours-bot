@@ -46,7 +46,7 @@ export function formatWorkSession(clockIn: string, clockOut: string, nightStart:
 	// session before night_start
 	if (end <= night) {
 		return {
-			lines: [`${clockIn}-${clockOut} = ${minutesToDuration(totalMinutes)}`],
+			lines: [`${clockIn}-${clockOut} = <b>${minutesToDuration(totalMinutes)}</b>`],
 			totalMinutes,
 		};
 	}
@@ -54,7 +54,7 @@ export function formatWorkSession(clockIn: string, clockOut: string, nightStart:
 	// session began in the night
 	if (start >= night) {
 		return {
-			lines: [`🌙${clockIn}-${clockOut} = ${minutesToDuration(totalMinutes)}`],
+			lines: [`🌙${clockIn}-${clockOut} = <b>${minutesToDuration(totalMinutes)}</b>`],
 			totalMinutes,
 		};
 	}
@@ -65,8 +65,8 @@ export function formatWorkSession(clockIn: string, clockOut: string, nightStart:
 
 	return {
 		lines: [
-			`${clockIn}-${nightStart} = ${minutesToDuration(dayMinutes)}`,
-			`🌙${nightStart}-${clockOut} = ${minutesToDuration(nightMinutes)}`,
+			`${clockIn}-${nightStart} = <b>${minutesToDuration(dayMinutes)}</b>`,
+			`🌙${nightStart}-${clockOut} = <b>${minutesToDuration(nightMinutes)}</b>`,
 		],
 		totalMinutes,
 	};

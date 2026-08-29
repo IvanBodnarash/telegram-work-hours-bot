@@ -13,12 +13,14 @@ export async function sendTelegramMessage(
 	threadId: number | null,
 	text: string,
 	replyMarkup?: InlineKeyboardMarkup,
+	parseMode?: 'HTML',
 ): Promise<void> {
 	const body: {
 		chat_id: number;
 		text: string;
 		message_thread_id?: number;
 		reply_markup?: InlineKeyboardMarkup;
+		parse_mode?: 'HTML';
 	} = {
 		chat_id: chatId,
 		text,
@@ -30,6 +32,10 @@ export async function sendTelegramMessage(
 
 	if (replyMarkup) {
 		body.reply_markup = replyMarkup;
+	}
+
+	if (parseMode) {
+		body.parse_mode = parseMode;
 	}
 
 	await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {

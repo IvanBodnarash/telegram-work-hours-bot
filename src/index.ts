@@ -431,7 +431,7 @@ ${gameType.emoji} ${gameType.name}`,
 					workDate,
 				});
 
-				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, day.text);
+				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, day.text, undefined, 'HTML');
 
 				return new Response('OK');
 			}
@@ -481,7 +481,9 @@ ${gameType.emoji} ${gameType.name}`,
 					telegramThreadId,
 					`${body}
 
-${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()}`,
+${separatorEmoji} POR LA SEMANA: <b>${minutesToDuration(totalMinutes).toUpperCase()}</b>`,
+					undefined,
+					'HTML',
 				);
 
 				return new Response('OK');
@@ -624,7 +626,9 @@ Formato: HH:MM`,
 					telegramThreadId,
 					`${body}
 
-${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()}`,
+${separatorEmoji} POR LA SEMANA: <b>${minutesToDuration(totalMinutes).toUpperCase()}</b>`,
+					undefined,
+					'HTML',
 				);
 
 				return new Response('OK');
@@ -690,7 +694,9 @@ ${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()
 					telegramThreadId,
 					`${body}
 
-${separatorEmoji} TOTAL ${capitalize(monthName)}: ${minutesToDuration(totalMinutes).toUpperCase()}`,
+${separatorEmoji} TOTAL ${capitalize(monthName)}: <b>${minutesToDuration(totalMinutes).toUpperCase()}</b>`,
+					undefined,
+					'HTML',
 				);
 
 				return new Response('OK');

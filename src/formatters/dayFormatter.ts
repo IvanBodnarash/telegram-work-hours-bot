@@ -16,6 +16,10 @@ export interface FormattedDay {
 	totalMinutes: number;
 }
 
+function escapeHtml(value: string): string {
+	return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 export async function formatDay({ db, chat, workDate }: FormatDayParams): Promise<FormattedDay> {
 	const workDay = await getWorkDayByDate(db, chat.id, workDate);
 
@@ -62,10 +66,11 @@ No hay juegos.`,
 
 	const gamesText = games
 		.map((game) => {
-			const base = `${game.game_emoji} ${game.game_name} ` + `|${game.scheduled_time}| (${game.client_name})`;
+			const base =
+				`${game.game_emoji} <i>${escapeHtml(game.game_name)}</i> ` + `|${game.scheduled_time}| (${escapeHtml(game.client_name)})`;
 
 			if (game.clock_in && !game.clock_out) {
-				return `${base}: ⬇️ ${game.clock_in}`;
+				return `${base}: ⬇️ <code>${game.clock_in}</code>`;
 			}
 
 			if (game.clock_in && game.clock_out) {
@@ -105,17 +110,17 @@ No hay juegos.`,
 		totalMinutes += formatted.totalMinutes;
 	}
 
-	let text = `${formattedDate} •${capitalize(weekday)}•
+	let text = `<u>${formattedDate} •${capitalize(weekday)}•</u>
 
 ${gamesText}`;
 
 	if (hoursLines.length > 0) {
 		text += `
 
-⌛ Horas ⏳
+<u>⌛ Horas ⏳</u>
 ${hoursLines.join('\n')}
 
-Total: ${minutesToDuration(totalMinutes)}`;
+<b>Total: ${minutesToDuration(totalMinutes)}</b>`;
 	}
 
 	return {
@@ -144,15 +149,15 @@ function getGameTimeMarkers(
 		}
 
 		if (group.gameIds.length === 1) {
-			return `: ⬇️ ${group.start} ⬆️ ${group.end}`;
+			return `: ⬇️ <code>${group.start}</code> ⬆️ <code>${group.end}</code>`;
 		}
 
 		if (index === 0) {
-			return `: ⬇️ ${group.start}`;
+			return `: ⬇️ <code>${group.start}</code>`;
 		}
 
 		if (index === group.gameIds.length - 1) {
-			return `: ⬆️ ${group.end}`;
+			return `: ⬆️ <code>${group.end}</code>`;
 		}
 
 		return '';
