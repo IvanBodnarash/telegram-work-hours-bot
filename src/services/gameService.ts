@@ -20,3 +20,105 @@ export async function createGame(
 		.bind(workDayId, gameTypeId, scheduledTime, clientName)
 		.run();
 }
+
+export interface GameWithType {
+	id: number;
+	work_day_id: number;
+	game_type_id: number;
+	work_session_id: number | null;
+	scheduled_time: string;
+	client_name: string;
+
+	game_name: string;
+	game_emoji: string;
+
+	clock_in: string | null;
+	clock_out: string | null;
+}
+
+export async function getGamesByWorkDay(db: D1Database, workDayId: number): Promise<GameWithType[]> {
+	const result = await db
+		.prepare(
+			`
+      SELECT
+        g.id,
+        g.work_day_id,
+        g.game_type_id,
+        g.work_session_id,
+        g.scheduled_time,
+        g.client_name,
+
+        gt.name AS game_name,
+        gt.emoji AS game_emoji,
+
+        ws.clock_in,
+        ws.clock_out
+
+      FROM games g
+
+      JOIN game_types gt
+        ON g.game_type_id = gt.id
+
+      LEFT JOIN work_sessions ws
+        ON g.work_session_id = ws.id
+
+      WHERE g.work_day_id = ?
+
+      ORDER BY g.scheduled_time
+    `,
+		)
+		.bind(workDayId)
+		.all<GameWithType>();
+
+	return result.results;
+}
+
+export async function getGameById(db: D1Database, gameId: number, chatId: number): Promise<GameWithType | null> {
+	return await db
+		.prepare(
+			`
+      SELECT
+        g.id,
+        g.work_day_id,
+        g.game_type_id,
+        g.work_session_id,
+        g.scheduled_time,
+        g.client_name,
+
+        gt.name AS game_name,
+        gt.emoji AS game_emoji,
+
+        ws.clock_in,
+        ws.clock_out
+
+      FROM games g
+
+      JOIN game_types gt
+        ON g.game_type_id = gt.id
+
+      JOIN work_days wd
+        ON g.work_day_id = wd.id
+
+      LEFT JOIN work_sessions ws
+        ON g.work_session_id = ws.id
+
+      WHERE g.id = ?
+        AND wd.chat_id = ?
+    `,
+		)
+		.bind(gameId, chatId)
+		.first<GameWithType>();
+}
+
+export async function attachGameToSession(db: D1Database, gameId: number, workSessionId: number): Promise<void> {
+	await db
+		.prepare(
+			`
+      UPDATE games
+      SET work_session_id = ?
+      WHERE id = ?
+    `,
+		)
+		.bind(workSessionId, gameId)
+		.run();
+}

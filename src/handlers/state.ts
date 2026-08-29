@@ -1,9 +1,10 @@
 import type { Chat } from '../services/chatService';
-
 import { getChatState, clearChatState, setChatState } from '../services/chatStateService';
+import { attachGameToSession } from '../services/gameService';
 import { createGameType, getGameTypeById } from '../services/gameTypeService';
-
 import { createMonthSettings } from '../services/monthSettingsService';
+import { closeWorkSession, createWorkSession } from '../services/workSessionService';
+
 import { sendTelegramMessage } from '../utils/telegram';
 
 interface Env {
@@ -230,6 +231,74 @@ Usa el formato HH:MM, por ejemplo:
 				],
 			},
 		);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_IN_TIME') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.gameId || !data?.workDayId) {
+			await clearChatState(env.DB, chat.id);
+			return true;
+		}
+
+		const time = text.trim();
+
+		if (!isValidTime(time)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Hora no válida.
+
+Usa el formato HH:MM, por ejemplo:
+15:20`,
+			);
+
+			return true;
+		}
+
+		const session = await createWorkSession(env.DB, data.workDayId, time);
+
+		await attachGameToSession(env.DB, data.gameId, session.id);
+
+		await clearChatState(env.DB, chat.id);
+
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Entrada registrada: ${time}`);
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_OUT_TIME') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+		if (!data?.sessionId) {
+			await clearChatState(env.DB, chat.id);
+			return true;
+		}
+
+		const time = text.trim();
+
+		if (!isValidTime(time)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Hora no válida.
+
+Usa el formato HH:MM, por ejemplo:
+17:30`,
+			);
+
+			return true;
+		}
+
+		await closeWorkSession(env.DB, data.sessionId, time);
+
+		await clearChatState(env.DB, chat.id);
+
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida registrada: ${time}`);
 
 		return true;
 	}

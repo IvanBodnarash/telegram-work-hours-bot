@@ -1,14 +1,17 @@
 import { getOrCreateChat } from './services/chatService';
 import { getGameTypeById } from './services/gameTypeService';
+import { getChatState, clearChatState, setChatState } from './services/chatStateService';
+import { getOrCreateWorkDay } from './services/workDayService';
+import { createGame, getGameById, attachGameToSession } from './services/gameService';
+import { closeWorkSession, createWorkSession } from './services/workSessionService';
 import { handleToday } from './handlers/today';
 import { handleAdd } from './handlers/add';
 import { handleGames } from './handlers/games';
 import { handleState } from './handlers/state';
+import { handleIn } from './handlers/in';
+import { handleOut } from './handlers/out';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
-import { getChatState, clearChatState, setChatState } from './services/chatStateService';
 import { getCurrentDate } from './utils/date';
-import { getOrCreateWorkDay } from './services/workDayService';
-import { createGame } from './services/gameService';
 
 interface Env {
 	DB: D1Database;
@@ -153,6 +156,152 @@ Formato: HH:MM`,
 				return new Response('OK');
 			}
 
+			const inGameMatch = callback.data.match(/^in:game:(\d+)$/);
+
+			if (inGameMatch) {
+				const gameId = Number(inGameMatch[1]);
+
+				const game = await getGameById(env.DB, gameId, chat.id);
+
+				if (!game) {
+					await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+
+					return new Response('OK');
+				}
+
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_IN_TIME', {
+					gameId: game.id,
+					workDayId: game.work_day_id,
+				});
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})
+
+Hora de entrada:`,
+					{
+						inline_keyboard: [
+							[
+								{
+									text: '⏱ Ahora',
+									callback_data: 'in:now',
+								},
+								{
+									text: '✏️ Escribir',
+									callback_data: 'in:manual',
+								},
+							],
+						],
+					},
+				);
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'in:now') {
+				const chatState = await getChatState(env.DB, chat.id);
+
+				if (!chatState || chatState.state !== 'WAITING_FOR_IN_TIME') {
+					return new Response('OK');
+				}
+
+				const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+				if (!data?.gameId || !data?.workDayId) {
+					await clearChatState(env.DB, chat.id);
+					return new Response('OK');
+				}
+
+				const now = new Date();
+
+				const currentTime = new Intl.DateTimeFormat('en-GB', {
+					timeZone: chat.timezone,
+					hour: '2-digit',
+					minute: '2-digit',
+					hour12: false,
+				}).format(now);
+
+				const session = await createWorkSession(env.DB, data.workDayId, currentTime);
+
+				await attachGameToSession(env.DB, data.gameId, session.id);
+
+				await clearChatState(env.DB, chat.id);
+
+				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Entrada registrada: ${currentTime}`);
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'in:manual') {
+				const chatState = await getChatState(env.DB, chat.id);
+
+				if (!chatState || chatState.state !== 'WAITING_FOR_IN_TIME') {
+					return new Response('OK');
+				}
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Escribe la hora de entrada.
+
+Formato: HH:MM`,
+				);
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'out:now') {
+				const chatState = await getChatState(env.DB, chat.id);
+
+				if (!chatState || chatState.state !== 'WAITING_FOR_OUT_TIME') {
+					return new Response('OK');
+				}
+
+				const data = chatState.data ? JSON.parse(chatState.data) : null;
+
+				if (!data?.sessionId) {
+					await clearChatState(env.DB, chat.id);
+					return new Response('OK');
+				}
+
+				const currentTime = new Intl.DateTimeFormat('en-GB', {
+					timeZone: chat.timezone,
+					hour: '2-digit',
+					minute: '2-digit',
+					hour12: false,
+				}).format(new Date());
+
+				await closeWorkSession(env.DB, data.sessionId, currentTime);
+
+				await clearChatState(env.DB, chat.id);
+
+				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida registrada: ${currentTime}`);
+
+				return new Response('OK');
+			}
+
+			if (callback.data === 'out:manual') {
+				const chatState = await getChatState(env.DB, chat.id);
+
+				if (!chatState || chatState.state !== 'WAITING_FOR_OUT_TIME') {
+					return new Response('OK');
+				}
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Escribe la hora de salida.
+
+Formato: HH:MM`,
+				);
+
+				return new Response('OK');
+			}
+
 			return new Response('OK');
 		}
 
@@ -201,6 +350,28 @@ Formato: HH:MM`,
 
 		if (text === '/add') {
 			await handleAdd({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
+		if (text === '/in') {
+			await handleIn({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
+		if (text === '/out') {
+			await handleOut({
 				env,
 				chat,
 				telegramChatId,

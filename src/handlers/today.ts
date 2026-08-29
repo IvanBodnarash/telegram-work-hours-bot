@@ -1,4 +1,5 @@
 import { getWorkDayByDate } from '../services/workDayService';
+import { getGamesByWorkDay } from '../services/gameService';
 import { sendTelegramMessage } from '../utils/telegram';
 
 interface Env {
@@ -56,13 +57,44 @@ No hay juegos para hoy.`,
 		return;
 	}
 
+	const games = await getGamesByWorkDay(env.DB, workDay.id as number);
+
+	if (games.length === 0) {
+		await sendTelegramMessage(
+			env.TELEGRAM_BOT_TOKEN,
+			telegramChatId,
+			telegramThreadId,
+			`${formattedDate} •${capitalize(weekday)}•
+
+No hay juegos para hoy.`,
+		);
+
+		return;
+	}
+
+	const gamesText = games
+		.map((game) => {
+			let line = `${game.game_emoji} ${game.game_name} ` + `|${game.scheduled_time}| (${game.client_name})`;
+
+			if (game.clock_in) {
+				line += `: ⬇️ ${game.clock_in}`;
+			}
+
+			if (game.clock_out) {
+				line += ` ⬆️ ${game.clock_out}`;
+			}
+
+			return line;
+		})
+		.join('\n');
+
 	await sendTelegramMessage(
 		env.TELEGRAM_BOT_TOKEN,
 		telegramChatId,
 		telegramThreadId,
 		`${formattedDate} •${capitalize(weekday)}•
 
-Work day encontrado ✅`,
+${gamesText}`,
 	);
 }
 
