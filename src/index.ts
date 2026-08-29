@@ -337,11 +337,17 @@ Formato: HH:MM`,
 
 				const visibleDays = days.filter((day) => day.totalMinutes > 0);
 
+				if (visibleDays.length === 0) {
+					await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay horas registradas esta semana.');
+
+					return new Response('OK');
+				}
+
 				const totalMinutes = visibleDays.reduce((total, day) => total + day.totalMinutes, 0);
 
 				const separatorEmoji = await getMonthEmojiByDate(env.DB, chat.id, dates[0]);
 
-				const separator = separatorEmoji.repeat(18);
+				const separator = separatorEmoji.repeat(15);
 
 				const body = visibleDays.map((day) => day.text).join(`\n\n${separator}\n\n`);
 
@@ -350,6 +356,8 @@ Formato: HH:MM`,
 					telegramChatId,
 					telegramThreadId,
 					`${body}
+
+${separator}
 
 ${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()}`,
 				);
