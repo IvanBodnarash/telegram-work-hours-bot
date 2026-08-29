@@ -2,22 +2,8 @@ import { getOrCreateChat } from './services/chatService';
 import { getGameTypeById, getGameTypes } from './services/gameTypeService';
 import { getChatState, clearChatState, setChatState } from './services/chatStateService';
 import { getOrCreateWorkDay } from './services/workDayService';
-import {
-	createGame,
-	getGameById,
-	attachGameToSession,
-	updateGameScheduledTime,
-	updateGameClientName,
-	updateGameType,
-	deleteGame,
-} from './services/gameService';
-import {
-	closeWorkSession,
-	createWorkSession,
-	deleteWorkSessionIfUnused,
-	updateWorkSessionClockIn,
-	updateWorkSessionClockOut,
-} from './services/workSessionService';
+import { createGame, getGameById, attachGameToSession, updateGameType, deleteGame } from './services/gameService';
+import { closeWorkSession, createWorkSession, deleteWorkSessionIfUnused } from './services/workSessionService';
 import { getMonthEmojiByDate } from './services/monthSettingsService';
 import { handleToday } from './handlers/today';
 import { handleWeek } from './handlers/week';
@@ -28,9 +14,10 @@ import { handleEdit, startEditForDate } from './handlers/edit';
 import { handleState } from './handlers/state';
 import { handleIn, startInForDate } from './handlers/in';
 import { handleOut, startOutForDate } from './handlers/out';
+import { handleSettings } from './handlers/settings';
 import { formatDay } from './formatters/dayFormatter';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
-import { getCurrentDate, getCurrentWeekDates, getDateWithOffset, getMonthWeeks } from './utils/date';
+import { getCurrentWeekDates, getDateWithOffset, getMonthWeeks } from './utils/date';
 import { minutesToDuration } from './utils/time';
 
 interface Env {
@@ -1044,6 +1031,23 @@ ${separatorEmoji} TOTAL ${capitalize(monthName)}: <b>${minutesToDuration(totalMi
 				return new Response('OK');
 			}
 
+			if (callback.data === 'settings:night_start') {
+				await setChatState(env.DB, chat.id, 'WAITING_FOR_NIGHT_START');
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Hora nocturna actual: ${chat.night_start}
+
+Escribe la nueva hora.
+
+Formato: HH:MM`,
+				);
+
+				return new Response('OK');
+			}
+
 			return new Response('OK');
 		}
 
@@ -1158,6 +1162,17 @@ ${separatorEmoji} TOTAL ${capitalize(monthName)}: <b>${minutesToDuration(totalMi
 
 		if (text === '/edit') {
 			await handleEdit({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
+		if (text === '/settings') {
+			await handleSettings({
 				env,
 				chat,
 				telegramChatId,

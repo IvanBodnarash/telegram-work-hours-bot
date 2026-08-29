@@ -72,3 +72,16 @@ export async function getOrCreateChat(db: D1Database, data: TelegramChatData): P
 
 	return createdChat;
 }
+
+export async function updateNightStart(db: D1Database, chatId: number, nightStart: string): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE chats
+			SET night_start = ?
+			WHERE id = ?
+		`,
+		)
+		.bind(nightStart, chatId)
+		.run();
+}

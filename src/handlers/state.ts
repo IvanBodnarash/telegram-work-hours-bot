@@ -1,4 +1,4 @@
-import type { Chat } from '../services/chatService';
+import { updateNightStart, type Chat } from '../services/chatService';
 import { getChatState, clearChatState, setChatState } from '../services/chatStateService';
 import { attachGameToSession, updateGameClientName, updateGameScheduledTime } from '../services/gameService';
 import { createGameType, getGameTypeById } from '../services/gameTypeService';
@@ -699,6 +699,34 @@ Usa el formato DD.MM.YYYY.`,
 			telegramThreadId,
 			workDate,
 		});
+
+		return true;
+	}
+
+	if (chatState.state === 'WAITING_FOR_NIGHT_START') {
+		const time = text.trim();
+
+		if (!isValidTime(time)) {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`❌ Hora no válida.
+
+Usa el formato HH:MM.
+
+Por ejemplo:
+22:00`,
+			);
+
+			return true;
+		}
+
+		await updateNightStart(env.DB, chat.id, time);
+
+		await clearChatState(env.DB, chat.id);
+
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Inicio nocturno actualizado: ${time}`);
 
 		return true;
 	}
