@@ -37,3 +37,11 @@ export async function createMonthSettings(db: D1Database, chatId: number, year: 
 		.bind(chatId, year, month, emoji)
 		.run();
 }
+
+export async function getMonthEmojiByDate(db: D1Database, chatId: number, workDate: string): Promise<string> {
+	const [year, month] = workDate.split('-').map(Number);
+
+	const settings = await getMonthSettings(db, chatId, year, month);
+
+	return settings?.emoji ?? '🌴';
+}

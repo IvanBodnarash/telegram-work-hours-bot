@@ -5,13 +5,17 @@ import { getOrCreateWorkDay } from './services/workDayService';
 import { createGame, getGameById, attachGameToSession } from './services/gameService';
 import { closeWorkSession, createWorkSession } from './services/workSessionService';
 import { handleToday } from './handlers/today';
+import { handleWeek } from './handlers/week';
 import { handleAdd } from './handlers/add';
 import { handleGames } from './handlers/games';
 import { handleState } from './handlers/state';
 import { handleIn } from './handlers/in';
 import { handleOut } from './handlers/out';
+import { formatDay } from './formatters/dayFormatter';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
-import { getCurrentDate } from './utils/date';
+import { getCurrentDate, getCurrentWeekDates } from './utils/date';
+import { minutesToDuration } from './utils/time';
+import { getMonthEmojiByDate } from './services/monthSettingsService';
 
 interface Env {
 	DB: D1Database;
@@ -200,6 +204,22 @@ Hora de entrada:`,
 				return new Response('OK');
 			}
 
+			const weekDayMatch = callback.data?.match(/^week:day:(\d{4}-\d{2}-\d{2})$/);
+
+			if (weekDayMatch) {
+				const workDate = weekDayMatch[1];
+
+				const day = await formatDay({
+					db: env.DB,
+					chat,
+					workDate,
+				});
+
+				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, day.text);
+
+				return new Response('OK');
+			}
+
 			if (callback.data === 'in:now') {
 				const chatState = await getChatState(env.DB, chat.id);
 
@@ -302,6 +322,41 @@ Formato: HH:MM`,
 				return new Response('OK');
 			}
 
+			if (callback.data === 'week:all') {
+				const dates = getCurrentWeekDates(chat.timezone);
+
+				const days = await Promise.all(
+					dates.map((workDate) =>
+						formatDay({
+							db: env.DB,
+							chat,
+							workDate,
+						}),
+					),
+				);
+
+				const visibleDays = days.filter((day) => day.totalMinutes > 0);
+
+				const totalMinutes = visibleDays.reduce((total, day) => total + day.totalMinutes, 0);
+
+				const separatorEmoji = await getMonthEmojiByDate(env.DB, chat.id, dates[0]);
+
+				const separator = separatorEmoji.repeat(18);
+
+				const body = visibleDays.map((day) => day.text).join(`\n\n${separator}\n\n`);
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`${body}
+
+${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()}`,
+				);
+
+				return new Response('OK');
+			}
+
 			return new Response('OK');
 		}
 
@@ -339,6 +394,17 @@ Formato: HH:MM`,
 
 		if (text === '/today') {
 			await handleToday({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
+		if (text === '/week') {
+			await handleWeek({
 				env,
 				chat,
 				telegramChatId,
