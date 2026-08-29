@@ -81,3 +81,31 @@ export async function updateWorkSessionClockOut(db: D1Database, sessionId: numbe
 		.bind(clockOut, sessionId)
 		.run();
 }
+
+export async function deleteWorkSessionIfUnused(db: D1Database, sessionId: number): Promise<void> {
+	const game = await db
+		.prepare(
+			`
+			SELECT id
+			FROM games
+			WHERE work_session_id = ?
+			LIMIT 1
+		`,
+		)
+		.bind(sessionId)
+		.first();
+
+	if (game) {
+		return;
+	}
+
+	await db
+		.prepare(
+			`
+			DELETE FROM work_sessions
+			WHERE id = ?
+		`,
+		)
+		.bind(sessionId)
+		.run();
+}

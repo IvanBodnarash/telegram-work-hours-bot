@@ -9,8 +9,15 @@ import {
 	updateGameScheduledTime,
 	updateGameClientName,
 	updateGameType,
+	deleteGame,
 } from './services/gameService';
-import { closeWorkSession, createWorkSession, updateWorkSessionClockIn, updateWorkSessionClockOut } from './services/workSessionService';
+import {
+	closeWorkSession,
+	createWorkSession,
+	deleteWorkSessionIfUnused,
+	updateWorkSessionClockIn,
+	updateWorkSessionClockOut,
+} from './services/workSessionService';
 import { getMonthEmojiByDate } from './services/monthSettingsService';
 import { handleToday } from './handlers/today';
 import { handleWeek } from './handlers/week';
@@ -477,6 +484,82 @@ Formato: HH:MM`,
 Escribe la nueva hora.
 
 Formato: HH:MM`,
+				);
+
+				return new Response('OK');
+			}
+
+			const editDeleteMatch = callback.data.match(/^edit:delete:(\d+)$/);
+
+			if (editDeleteMatch) {
+				const gameId = Number(editDeleteMatch[1]);
+
+				const game = await getGameById(env.DB, gameId, chat.id);
+
+				if (!game) {
+					await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+
+					return new Response('OK');
+				}
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`⚠️ ¿Eliminar este juego?
+
+${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})`,
+					{
+						inline_keyboard: [
+							[
+								{
+									text: '🗑 Sí, eliminar',
+									callback_data: `edit:confirm_delete:${game.id}`,
+								},
+							],
+							[
+								{
+									text: '❌ Cancelar',
+									callback_data: 'edit:cancel',
+								},
+							],
+						],
+					},
+				);
+
+				return new Response('OK');
+			}
+
+			const editConfirmDeleteMatch = callback.data.match(/^edit:confirm_delete:(\d+)$/);
+
+			if (editConfirmDeleteMatch) {
+				const gameId = Number(editConfirmDeleteMatch[1]);
+
+				const game = await getGameById(env.DB, gameId, chat.id);
+
+				if (!game) {
+					await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+
+					return new Response('OK');
+				}
+
+				const sessionId = game.work_session_id;
+
+				await deleteGame(env.DB, gameId, chat.id);
+
+				if (sessionId) {
+					await deleteWorkSessionIfUnused(env.DB, sessionId);
+				}
+
+				await clearChatState(env.DB, chat.id);
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`✅ Juego eliminado:
+
+${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})`,
 				);
 
 				return new Response('OK');

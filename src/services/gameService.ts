@@ -176,3 +176,20 @@ export async function updateGameType(db: D1Database, gameId: number, chatId: num
 		.bind(gameTypeId, gameId, chatId)
 		.run();
 }
+
+export async function deleteGame(db: D1Database, gameId: number, chatId: number): Promise<void> {
+	await db
+		.prepare(
+			`
+			DELETE FROM games
+			WHERE id = ?
+			AND work_day_id IN (
+				SELECT id
+				FROM work_days
+				WHERE chat_id = ?
+			)
+		`,
+		)
+		.bind(gameId, chatId)
+		.run();
+}
