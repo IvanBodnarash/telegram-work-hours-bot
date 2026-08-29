@@ -158,3 +158,21 @@ export async function updateGameClientName(db: D1Database, gameId: number, chatI
 		.bind(clientName, gameId, chatId)
 		.run();
 }
+
+export async function updateGameType(db: D1Database, gameId: number, chatId: number, gameTypeId: number): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE games
+			SET game_type_id = ?
+			WHERE id = ?
+			AND work_day_id IN (
+				SELECT id
+				FROM work_days
+				WHERE chat_id = ?
+			)
+		`,
+		)
+		.bind(gameTypeId, gameId, chatId)
+		.run();
+}

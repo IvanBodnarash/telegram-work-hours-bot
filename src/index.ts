@@ -1,9 +1,17 @@
 import { getOrCreateChat } from './services/chatService';
-import { getGameTypeById } from './services/gameTypeService';
+import { getGameTypeById, getGameTypes } from './services/gameTypeService';
 import { getChatState, clearChatState, setChatState } from './services/chatStateService';
 import { getOrCreateWorkDay } from './services/workDayService';
-import { createGame, getGameById, attachGameToSession, updateGameScheduledTime, updateGameClientName } from './services/gameService';
+import {
+	createGame,
+	getGameById,
+	attachGameToSession,
+	updateGameScheduledTime,
+	updateGameClientName,
+	updateGameType,
+} from './services/gameService';
 import { closeWorkSession, createWorkSession } from './services/workSessionService';
+import { getMonthEmojiByDate } from './services/monthSettingsService';
 import { handleToday } from './handlers/today';
 import { handleWeek } from './handlers/week';
 import { handleMonth } from './handlers/month';
@@ -17,7 +25,6 @@ import { formatDay } from './formatters/dayFormatter';
 import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
 import { getCurrentDate, getCurrentWeekDates, getMonthWeeks } from './utils/date';
 import { minutesToDuration } from './utils/time';
-import { getMonthEmojiByDate } from './services/monthSettingsService';
 
 interface Env {
 	DB: D1Database;
@@ -337,6 +344,82 @@ Escribe el nuevo nombre:`,
 				return new Response('OK');
 			}
 
+			const editTypeMatch = callback.data.match(/^edit:type:(\d+)$/);
+
+			if (editTypeMatch) {
+				const gameId = Number(editTypeMatch[1]);
+
+				const game = await getGameById(env.DB, gameId, chat.id);
+
+				if (!game) {
+					return new Response('OK');
+				}
+
+				const gameTypes = await getGameTypes(env.DB, chat.id);
+
+				if (gameTypes.length === 0) {
+					await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos configurados.');
+
+					return new Response('OK');
+				}
+
+				const buttons = gameTypes.map((type) => ({
+					text: `${type.emoji} ${type.name}`,
+					callback_data: `edit:set_type:${gameId}:${type.id}`,
+				}));
+
+				const rows = [];
+
+				for (let i = 0; i < buttons.length; i += 3) {
+					rows.push(buttons.slice(i, i + 3));
+				}
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`Juego actual:
+
+${game.game_emoji} ${game.game_name}
+
+Selecciona el nuevo juego:`,
+					{
+						inline_keyboard: rows,
+					},
+				);
+
+				return new Response('OK');
+			}
+
+			const editSetTypeMatch = callback.data.match(/^edit:set_type:(\d+):(\d+)$/);
+
+			if (editSetTypeMatch) {
+				const gameId = Number(editSetTypeMatch[1]);
+
+				const gameTypeId = Number(editSetTypeMatch[2]);
+
+				const gameType = await getGameTypeById(env.DB, gameTypeId, chat.id);
+
+				if (!gameType) {
+					await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+
+					return new Response('OK');
+				}
+
+				await updateGameType(env.DB, gameId, chat.id, gameTypeId);
+
+				await sendTelegramMessage(
+					env.TELEGRAM_BOT_TOKEN,
+					telegramChatId,
+					telegramThreadId,
+					`✅ Juego actualizado:
+
+${gameType.emoji} ${gameType.name}`,
+				);
+
+				return new Response('OK');
+			}
+
 			const weekDayMatch = callback.data?.match(/^week:day:(\d{4}-\d{2}-\d{2})$/);
 
 			if (weekDayMatch) {
@@ -596,13 +679,18 @@ ${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()
 
 				const body = visibleDays.map((day) => day.text).join(`\n\n${separator}\n\n`);
 
+				const monthName = new Intl.DateTimeFormat('es-ES', {
+					timeZone: 'UTC',
+					month: 'long',
+				}).format(new Date(Date.UTC(year, month - 1, 1)));
+
 				await sendTelegramMessage(
 					env.TELEGRAM_BOT_TOKEN,
 					telegramChatId,
 					telegramThreadId,
 					`${body}
 
-${separatorEmoji} POR LA SEMANA: ${minutesToDuration(totalMinutes).toUpperCase()}`,
+${separatorEmoji} TOTAL ${capitalize(monthName)}: ${minutesToDuration(totalMinutes).toUpperCase()}`,
 				);
 
 				return new Response('OK');
