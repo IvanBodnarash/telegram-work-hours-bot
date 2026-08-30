@@ -4,7 +4,7 @@ import { setChatState } from '../services/chatStateService';
 
 import { exportMonth } from '../handlers/export';
 
-import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage } from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -42,6 +42,7 @@ export async function handleExportCallbacks({
 			telegramThreadId,
 			year,
 			month,
+			telegramMessageId,
 		});
 
 		return true;

@@ -189,6 +189,15 @@ export async function exportMonth({
 
 	const filename = `work-hours-${year}-${String(month).padStart(2, '0')}.csv`;
 
+	if (telegramMessageId) {
+		await editTelegramMessage(
+			env.TELEGRAM_BOT_TOKEN,
+			telegramChatId,
+			telegramMessageId,
+			`✅ Exportación preparada: ${String(month).padStart(2, '0')}.${year}`,
+		);
+	}
+
 	await sendTelegramDocument(
 		env.TELEGRAM_BOT_TOKEN,
 		telegramChatId,
