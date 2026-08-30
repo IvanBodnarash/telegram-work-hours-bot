@@ -4,7 +4,7 @@ import { setChatState } from '../services/chatStateService';
 
 import { exportMonth } from '../handlers/export';
 
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -16,10 +16,18 @@ interface Params {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId: number;
 	callbackData: string;
 }
 
-export async function handleExportCallbacks({ env, chat, telegramChatId, telegramThreadId, callbackData }: Params): Promise<boolean> {
+export async function handleExportCallbacks({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	telegramMessageId,
+	callbackData,
+}: Params): Promise<boolean> {
 	const monthMatch = callbackData.match(/^export:month:(\d{4}):(\d{1,2})$/);
 
 	if (monthMatch) {
@@ -40,12 +48,14 @@ export async function handleExportCallbacks({ env, chat, telegramChatId, telegra
 	}
 
 	if (callbackData === 'export:custom') {
-		await setChatState(env.DB, chat.id, 'WAITING_FOR_EXPORT_MONTH');
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_EXPORT_MONTH', {
+			flowMessageId: telegramMessageId,
+		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Escribe el mes.
 
 Formato: MM.YYYY

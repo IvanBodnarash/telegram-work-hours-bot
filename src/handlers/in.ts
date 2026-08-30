@@ -5,7 +5,7 @@ import { getGamesByWorkDay } from '../services/gameService';
 import { setChatState } from '../services/chatStateService';
 
 import { getCurrentDate } from '../utils/date';
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 import { getDatePickerKeyboard } from '../utils/datePicker';
 
 interface Env {
@@ -20,6 +20,15 @@ interface HandleInParams {
 	telegramThreadId: number | null;
 }
 
+interface StartInForDateParams {
+	env: Env;
+	chat: Chat;
+	telegramChatId: number;
+	telegramThreadId: number | null;
+	workDate: string;
+	telegramMessageId?: number;
+}
+
 export async function handleIn({ env, chat, telegramChatId, telegramThreadId }: HandleInParams): Promise<void> {
 	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Para qué día?', getDatePickerKeyboard('in'));
 }
@@ -30,9 +39,8 @@ export async function startInForDate({
 	telegramChatId,
 	telegramThreadId,
 	workDate,
-}: HandleInParams & {
-	workDate: string;
-}): Promise<void> {
+	telegramMessageId,
+}: StartInForDateParams): Promise<void> {
 	const workDay = await getWorkDayByDate(env.DB, chat.id, workDate);
 
 	if (!workDay) {
@@ -46,7 +54,11 @@ export async function startInForDate({
 	const pendingGames = games.filter((game) => game.work_session_id === null);
 
 	if (pendingGames.length === 0) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos pendientes de entrada.');
+		if (telegramMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'No hay juegos pendientes de entrada.');
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos pendientes de entrada.');
+		}
 
 		return;
 	}
@@ -56,8 +68,9 @@ export async function startInForDate({
 
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_IN_TIME', {
 			gameId: game.id,
-			workDayId: workDay.id,
+			workDayId: game.work_day_id,
 			workDate,
+			flowMessageId: telegramMessageId,
 		});
 
 		const today = getCurrentDate(chat.timezone);
@@ -89,15 +102,15 @@ export async function startInForDate({
 						],
 					};
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})
+		const text = `${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})
 
-Hora de entrada:`,
-			keyboard,
-		);
+Hora de entrada:`;
+
+		if (telegramMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, text, keyboard);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, text, keyboard);
+		}
 
 		return;
 	}
@@ -111,5 +124,9 @@ Hora de entrada:`,
 		]),
 	};
 
-	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'Elige un juego:', keyboard);
+	if (telegramMessageId) {
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'Elige un juego:', keyboard);
+	} else {
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'Elige un juego:', keyboard);
+	}
 }

@@ -11,7 +11,7 @@ import {
 	updateWorkSessionClockOut,
 } from '../services/workSessionService';
 import { getCurrentDate, parseDisplayDate } from '../utils/date';
-import { sendTelegramMessage } from '../utils/telegram';
+import { deleteTelegramMessage, editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 import { timeToMinutes } from '../utils/time';
 import { startAddForDate } from './add';
 import { startEditForDate } from './edit';
@@ -30,6 +30,7 @@ interface HandleStateParams {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId: number;
 	text: string;
 }
 
@@ -53,7 +54,18 @@ function isValidTime(value: string): boolean {
 	return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
-export async function handleState({ env, chat, telegramChatId, telegramThreadId, text }: HandleStateParams): Promise<boolean> {
+async function deleteUserMessage(env: Env, telegramChatId: number, telegramMessageId: number): Promise<void> {
+	await deleteTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId);
+}
+
+export async function handleState({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	telegramMessageId,
+	text,
+}: HandleStateParams): Promise<boolean> {
 	const chatState = await getChatState(env.DB, chat.id);
 
 	if (!chatState) {
@@ -76,13 +88,13 @@ export async function handleState({ env, chat, telegramChatId, telegramThreadId,
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await createMonthSettings(env.DB, chat.id, data.year, data.month, emoji);
 
 		const workDate = data.workDate;
 
 		await clearChatState(env.DB, chat.id);
-
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Emoji guardado: ${emoji}`);
 
 		if (workDate) {
 			await startAddForDate({
@@ -91,6 +103,7 @@ export async function handleState({ env, chat, telegramChatId, telegramThreadId,
 				telegramChatId,
 				telegramThreadId,
 				workDate,
+				telegramMessageId: data.flowMessageId,
 			});
 		}
 
@@ -98,6 +111,8 @@ export async function handleState({ env, chat, telegramChatId, telegramThreadId,
 	}
 
 	if (chatState.state === 'WAITING_FOR_GAME_NAME') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
 		const gameName = text.trim();
 
 		if (!gameName) {
@@ -106,18 +121,32 @@ export async function handleState({ env, chat, telegramChatId, telegramThreadId,
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_EMOJI', {
 			gameName,
+			flowMessageId: data?.flowMessageId,
 		});
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`Juego: ${gameName}
+		if (data?.flowMessageId) {
+			await editTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				data.flowMessageId,
+				`Juego: ${gameName}
 
 Ahora envía un emoji para este juego.`,
-		);
+			);
+		} else {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`Juego: ${gameName}
+
+Ahora envía un emoji para este juego.`,
+			);
+		}
 
 		return true;
 	}
@@ -138,18 +167,21 @@ Ahora envía un emoji para este juego.`,
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await createGameType(env.DB, chat.id, data.gameName, emoji);
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`✅ Juego añadido:
+		const resultText = `✅ Juego añadido:
 
-${emoji} ${data.gameName}`,
-		);
+${emoji} ${data.gameName}`;
+
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, resultText);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, resultText);
+		}
 
 		return true;
 	}
@@ -178,20 +210,34 @@ Usa el formato HH:MM, por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_CLIENT', {
 			gameTypeId: data.gameTypeId,
 			scheduledTime: time,
 			workDate: data.workDate,
+			flowMessageId: data.flowMessageId,
 		});
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`Hora: ${time}
+		if (data.flowMessageId) {
+			await editTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				data.flowMessageId,
+				`Hora: ${time}
 
-¿Cuál es el nombre del cliente?`,
-		);
+Escribe el nombre del cliente:`,
+			);
+		} else {
+			await sendTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramThreadId,
+				`Hora: ${time}
+
+Escribe el nombre del cliente:`,
+			);
+		}
 
 		return true;
 	}
@@ -212,6 +258,8 @@ Usa el formato HH:MM, por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		const today = getCurrentDate(chat.timezone);
 
 		if (data.workDate !== today) {
@@ -220,16 +268,18 @@ Usa el formato HH:MM, por ejemplo:
 				scheduledTime: data.scheduledTime,
 				clientName,
 				workDate: data.workDate,
+				flowMessageId: data.flowMessageId,
 			});
 
-			await sendTelegramMessage(
-				env.TELEGRAM_BOT_TOKEN,
-				telegramChatId,
-				telegramThreadId,
-				`Hora de entrada:
+			const message = `Hora de entrada:
 
-Formato: HH:MM`,
-			);
+Formato: HH:MM`;
+
+			if (data.flowMessageId) {
+				await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, message);
+			} else {
+				await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, message);
+			}
 
 			return true;
 		}
@@ -246,34 +296,37 @@ Formato: HH:MM`,
 			scheduledTime: data.scheduledTime,
 			clientName,
 			workDate: data.workDate,
+			flowMessageId: data.flowMessageId,
 		});
 
 		const [year, month, day] = data.workDate.split('-');
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`${gameType.emoji} ${gameType.name} |${data.scheduledTime}| (${clientName})
+		const confirmationText = `${gameType.emoji} ${gameType.name} |${data.scheduledTime}| (${clientName})
 
 📅 ${day}.${month}.${year}
 
-¿Guardar?`,
-			{
-				inline_keyboard: [
-					[
-						{
-							text: '✅ Guardar',
-							callback_data: 'add_game:save',
-						},
-						{
-							text: '❌ Cancelar',
-							callback_data: 'add_game:cancel',
-						},
-					],
+¿Guardar?`;
+
+		const keyboard = {
+			inline_keyboard: [
+				[
+					{
+						text: '✅ Guardar',
+						callback_data: 'add_game:save',
+					},
+					{
+						text: '❌ Cancelar',
+						callback_data: 'add_game:cancel',
+					},
 				],
-			},
-		);
+			],
+		};
+
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, confirmationText, keyboard);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, confirmationText, keyboard);
+		}
 
 		return true;
 	}
@@ -322,13 +375,19 @@ Primero registra la salida con /out.`,
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		const session = await createWorkSession(env.DB, data.workDayId, time);
 
 		await attachGameToSession(env.DB, data.gameId, session.id);
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Entrada registrada: ${time}`);
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Entrada registrada: ${time}`);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Entrada registrada: ${time}`);
+		}
 
 		return true;
 	}
@@ -370,11 +429,17 @@ Entrada: ${data.clockIn}`,
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await closeWorkSession(env.DB, data.sessionId, time);
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida registrada: ${time}`);
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Salida registrada: ${time}`);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida registrada: ${time}`);
+		}
 
 		return true;
 	}
@@ -404,11 +469,17 @@ Usa el formato HH:MM, por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await updateGameScheduledTime(env.DB, data.gameId, chat.id, time);
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Hora actualizada: ${time}`);
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Hora actualizada: ${time}`);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Hora actualizada: ${time}`);
+		}
 
 		return true;
 	}
@@ -430,11 +501,17 @@ Usa el formato HH:MM, por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await updateGameClientName(env.DB, data.gameId, chat.id, clientName);
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Cliente actualizado: ${clientName}`);
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Cliente actualizado: ${clientName}`);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Cliente actualizado: ${clientName}`);
+		}
 
 		return true;
 	}
@@ -463,11 +540,17 @@ Usa el formato HH:MM, por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await updateWorkSessionClockIn(env.DB, data.sessionId, time);
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Entrada actualizada: ${time}`);
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Entrada actualizada: ${time}`);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Entrada actualizada: ${time}`);
+		}
 
 		return true;
 	}
@@ -496,16 +579,24 @@ Usa el formato HH:MM, por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await updateWorkSessionClockOut(env.DB, data.sessionId, time);
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida actualizada: ${time}`);
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Salida actualizada: ${time}`);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida actualizada: ${time}`);
+		}
 
 		return true;
 	}
 
 	if (chatState.state === 'WAITING_FOR_ADD_DATE') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
 		const workDate = parseDisplayDate(text);
 
 		if (!workDate) {
@@ -524,6 +615,8 @@ Por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await clearChatState(env.DB, chat.id);
 
 		await startAddForDate({
@@ -532,6 +625,7 @@ Por ejemplo:
 			telegramChatId,
 			telegramThreadId,
 			workDate,
+			telegramMessageId: data?.flowMessageId,
 		});
 
 		return true;
@@ -561,19 +655,23 @@ Usa el formato HH:MM, por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_PAST_GAME_CLOCK_OUT', {
 			...data,
 			clockIn,
+			flowMessageId: data.flowMessageId,
 		});
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`Hora de salida:
+		const message = `Hora de salida:
 
-Formato: HH:MM`,
-		);
+Formato: HH:MM`;
+
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, message);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, message);
+		}
 
 		return true;
 	}
@@ -583,6 +681,7 @@ Formato: HH:MM`,
 
 		if (!data?.gameTypeId || !data?.scheduledTime || !data?.clientName || !data?.workDate || !data?.clockIn) {
 			await clearChatState(env.DB, chat.id);
+
 			return true;
 		}
 
@@ -613,6 +712,8 @@ Usa el formato HH:MM, por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_CONFIRMATION', {
 			...data,
 			clockOut,
@@ -622,42 +723,47 @@ Usa el formato HH:MM, por ejemplo:
 
 		if (!gameType) {
 			await clearChatState(env.DB, chat.id);
+
 			return true;
 		}
 
 		const [year, month, day] = data.workDate.split('-');
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`${gameType.emoji} ${gameType.name} |${data.scheduledTime}| (${data.clientName})
+		const confirmationText = `${gameType.emoji} ${gameType.name} |${data.scheduledTime}| (${data.clientName})
 
 📅 ${day}.${month}.${year}
 ⬇️ ${data.clockIn}
 ⬆️ ${clockOut}
 
-¿Guardar?`,
-			{
-				inline_keyboard: [
-					[
-						{
-							text: '✅ Guardar',
-							callback_data: 'add_game:save',
-						},
-						{
-							text: '❌ Cancelar',
-							callback_data: 'add_game:cancel',
-						},
-					],
+¿Guardar?`;
+
+		const keyboard = {
+			inline_keyboard: [
+				[
+					{
+						text: '✅ Guardar',
+						callback_data: 'add_game:save',
+					},
+					{
+						text: '❌ Cancelar',
+						callback_data: 'add_game:cancel',
+					},
 				],
-			},
-		);
+			],
+		};
+
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, confirmationText, keyboard);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, confirmationText, keyboard);
+		}
 
 		return true;
 	}
 
 	if (chatState.state === 'WAITING_FOR_IN_DATE') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
 		const workDate = parseDisplayDate(text);
 
 		if (!workDate) {
@@ -672,6 +778,8 @@ Usa el formato DD.MM.YYYY.`,
 
 			return true;
 		}
+
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
 
 		await clearChatState(env.DB, chat.id);
 
@@ -681,12 +789,15 @@ Usa el formato DD.MM.YYYY.`,
 			telegramChatId,
 			telegramThreadId,
 			workDate,
+			telegramMessageId: data?.flowMessageId,
 		});
 
 		return true;
 	}
 
 	if (chatState.state === 'WAITING_FOR_OUT_DATE') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
 		const workDate = parseDisplayDate(text);
 
 		if (!workDate) {
@@ -701,6 +812,8 @@ Usa el formato DD.MM.YYYY.`,
 
 			return true;
 		}
+
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
 
 		await clearChatState(env.DB, chat.id);
 
@@ -710,12 +823,15 @@ Usa el formato DD.MM.YYYY.`,
 			telegramChatId,
 			telegramThreadId,
 			workDate,
+			telegramMessageId: data?.flowMessageId,
 		});
 
 		return true;
 	}
 
 	if (chatState.state === 'WAITING_FOR_EDIT_DATE') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
 		const workDate = parseDisplayDate(text);
 
 		if (!workDate) {
@@ -731,6 +847,8 @@ Usa el formato DD.MM.YYYY.`,
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await clearChatState(env.DB, chat.id);
 
 		await startEditForDate({
@@ -739,12 +857,15 @@ Usa el formato DD.MM.YYYY.`,
 			telegramChatId,
 			telegramThreadId,
 			workDate,
+			telegramMessageId: data?.flowMessageId,
 		});
 
 		return true;
 	}
 
 	if (chatState.state === 'WAITING_FOR_NIGHT_START') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
 		const time = text.trim();
 
 		if (!isValidTime(time)) {
@@ -763,11 +884,17 @@ Por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		await updateNightStart(env.DB, chat.id, time);
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Inicio nocturno actualizado: ${time}`);
+		if (data?.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Inicio nocturno actualizado: ${time}`);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Inicio nocturno actualizado: ${time}`);
+		}
 
 		return true;
 	}
@@ -789,6 +916,8 @@ Por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		const existing = await getMonthSettings(env.DB, chat.id, data.year, data.month);
 
 		if (existing) {
@@ -799,12 +928,18 @@ Por ejemplo:
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Emoji actualizado: ${emoji}`);
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Emoji actualizado: ${emoji}`);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Emoji actualizado: ${emoji}`);
+		}
 
 		return true;
 	}
 
 	if (chatState.state === 'WAITING_FOR_EXPORT_MONTH') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
 		const value = text.trim();
 
 		const match = value.match(/^(0[1-9]|1[0-2])\.(\d{4})$/);
@@ -825,10 +960,21 @@ Por ejemplo:
 			return true;
 		}
 
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
+
 		const month = Number(match[1]);
 		const year = Number(match[2]);
 
 		await clearChatState(env.DB, chat.id);
+
+		if (data?.flowMessageId) {
+			await editTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				data.flowMessageId,
+				`📄 Exportando ${String(month).padStart(2, '0')}.${year}...`,
+			);
+		}
 
 		await exportMonth({
 			env,
@@ -837,12 +983,15 @@ Por ejemplo:
 			telegramThreadId,
 			year,
 			month,
+			telegramMessageId: data?.flowMessageId,
 		});
 
 		return true;
 	}
 
 	if (chatState.state === 'WAITING_FOR_STATS_MONTH') {
+		const data = chatState.data ? JSON.parse(chatState.data) : null;
+
 		const value = text.trim();
 
 		const match = value.match(/^(0[1-9]|1[0-2])\.(\d{4})$/);
@@ -862,6 +1011,8 @@ Por ejemplo:
 
 			return true;
 		}
+
+		await deleteUserMessage(env, telegramChatId, telegramMessageId);
 
 		const month = Number(match[1]);
 		const year = Number(match[2]);
@@ -875,6 +1026,7 @@ Por ejemplo:
 			telegramThreadId,
 			year,
 			month,
+			telegramMessageId: data?.flowMessageId,
 		});
 
 		return true;

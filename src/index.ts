@@ -17,6 +17,7 @@ import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
 import { handleCallback } from './callbacks';
 import { handleExport } from './handlers/export';
 import { handleStats } from './handlers/stats';
+import { handleCancel } from './handlers/cancel';
 
 interface Env {
 	DB: D1Database;
@@ -32,6 +33,7 @@ interface TelegramChat {
 }
 
 interface TelegramMessage {
+	message_id: number;
 	chat: TelegramChat;
 	text?: string;
 	message_thread_id?: number;
@@ -69,7 +71,10 @@ export default {
 			}
 
 			const telegramChatId = callbackMessage.chat.id;
+
 			const telegramThreadId = callbackMessage.message_thread_id ?? null;
+
+			const telegramMessageId = callbackMessage.message_id;
 
 			const chatName = callbackMessage.chat.title ?? callbackMessage.chat.first_name ?? callbackMessage.chat.username ?? null;
 
@@ -85,6 +90,7 @@ export default {
 				chat,
 				telegramChatId,
 				telegramThreadId,
+				telegramMessageId,
 				callbackData: callback.data,
 			});
 
@@ -266,11 +272,23 @@ export default {
 			return new Response('OK');
 		}
 
+		if (text === '/cancel') {
+			await handleCancel({
+				env,
+				chat,
+				telegramChatId,
+				telegramThreadId,
+			});
+
+			return new Response('OK');
+		}
+
 		const stateHandled = await handleState({
 			env,
 			chat,
 			telegramChatId,
 			telegramThreadId,
+			telegramMessageId: message.message_id,
 			text,
 		});
 

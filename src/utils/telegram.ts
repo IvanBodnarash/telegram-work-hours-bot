@@ -7,6 +7,10 @@ interface InlineKeyboardMarkup {
 	inline_keyboard: InlineKeyboardButton[][];
 }
 
+interface TelegramSentMessage {
+	message_id: number;
+}
+
 export async function sendTelegramMessage(
 	botToken: string,
 	chatId: number,
@@ -14,7 +18,7 @@ export async function sendTelegramMessage(
 	text: string,
 	replyMarkup?: InlineKeyboardMarkup,
 	parseMode?: 'HTML',
-): Promise<void> {
+): Promise<number> {
 	const body: {
 		chat_id: number;
 		text: string;
@@ -38,13 +42,71 @@ export async function sendTelegramMessage(
 		body.parse_mode = parseMode;
 	}
 
-	await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+	const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
 		},
 		body: JSON.stringify(body),
 	});
+
+	if (!response.ok) {
+		throw new Error(`Telegram sendMessage failed: ${await response.text()}`);
+	}
+
+	const result = await response.json<{
+		ok: boolean;
+		result: TelegramSentMessage;
+	}>();
+
+	return result.result.message_id;
+}
+
+export async function editTelegramMessage(
+	botToken: string,
+	chatId: number,
+	messageId: number,
+	text: string,
+	replyMarkup?: InlineKeyboardMarkup,
+	parseMode?: 'HTML',
+): Promise<void> {
+	const body: {
+		chat_id: number;
+		message_id: number;
+		text: string;
+		reply_markup?: InlineKeyboardMarkup;
+		parse_mode?: 'HTML';
+	} = {
+		chat_id: chatId,
+		message_id: messageId,
+		text,
+	};
+
+	if (replyMarkup) {
+		body.reply_markup = replyMarkup;
+	}
+
+	if (parseMode) {
+		body.parse_mode = parseMode;
+	}
+
+	const response = await fetch(`https://api.telegram.org/bot${botToken}/editMessageText`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify(body),
+	});
+
+	if (!response.ok) {
+		const error = await response.text();
+
+		if (error.includes('message is not modified')) {
+			return;
+		}
+
+		throw new Error(`Telegram editMessageText failed: ${error}`);
+	}
 }
 
 export async function answerCallbackQuery(botToken: string, callbackQueryId: string): Promise<void> {
@@ -92,5 +154,24 @@ export async function sendTelegramDocument(
 
 	if (!response.ok) {
 		throw new Error(`Telegram sendDocument failed: ${await response.text()}`);
+	}
+}
+
+export async function deleteTelegramMessage(botToken: string, chatId: number, messageId: number): Promise<void> {
+	const response = await fetch(`https://api.telegram.org/bot${botToken}/deleteMessage`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({
+			chat_id: chatId,
+			message_id: messageId,
+		}),
+	});
+
+	if (!response.ok) {
+		const error = await response.text();
+
+		console.error(`Telegram deleteMessage failed: ${error}`);
 	}
 }

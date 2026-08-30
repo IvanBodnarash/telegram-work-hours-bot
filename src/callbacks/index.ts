@@ -18,6 +18,7 @@ interface HandleCallbackParams {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId: number;
 	callbackData: string;
 }
 
@@ -26,6 +27,7 @@ export async function handleCallback({
 	chat,
 	telegramChatId,
 	telegramThreadId,
+	telegramMessageId,
 	callbackData,
 }: HandleCallbackParams): Promise<boolean> {
 	const params = {
@@ -33,6 +35,7 @@ export async function handleCallback({
 		chat,
 		telegramChatId,
 		telegramThreadId,
+		telegramMessageId,
 		callbackData,
 	};
 

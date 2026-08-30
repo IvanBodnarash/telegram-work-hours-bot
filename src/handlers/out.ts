@@ -5,7 +5,7 @@ import { getOpenWorkSession } from '../services/workSessionService';
 import { setChatState } from '../services/chatStateService';
 
 import { getCurrentDate } from '../utils/date';
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 import { getDatePickerKeyboard } from '../utils/datePicker';
 
 interface Env {
@@ -20,6 +20,15 @@ interface HandleOutParams {
 	telegramThreadId: number | null;
 }
 
+interface StartOutForDateParams {
+	env: Env;
+	chat: Chat;
+	telegramChatId: number;
+	telegramThreadId: number | null;
+	workDate: string;
+	telegramMessageId?: number;
+}
+
 export async function handleOut({ env, chat, telegramChatId, telegramThreadId }: HandleOutParams): Promise<void> {
 	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Para qué día?', getDatePickerKeyboard('out'));
 }
@@ -30,13 +39,16 @@ export async function startOutForDate({
 	telegramChatId,
 	telegramThreadId,
 	workDate,
-}: HandleOutParams & {
-	workDate: string;
-}): Promise<void> {
+	telegramMessageId,
+}: StartOutForDateParams): Promise<void> {
 	const workDay = await getWorkDayByDate(env.DB, chat.id, workDate);
 
 	if (!workDay) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay ninguna sesión abierta.');
+		if (telegramMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'No hay ninguna sesión abierta.');
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay ninguna sesión abierta.');
+		}
 
 		return;
 	}
@@ -44,7 +56,11 @@ export async function startOutForDate({
 	const session = await getOpenWorkSession(env.DB, workDay.id as number);
 
 	if (!session) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay ninguna sesión abierta para este día.');
+		if (telegramMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'No hay ninguna sesión abierta para este día.');
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay ninguna sesión abierta para este día.');
+		}
 
 		return;
 	}
@@ -53,9 +69,14 @@ export async function startOutForDate({
 		sessionId: session.id,
 		workDate,
 		clockIn: session.clock_in,
+		flowMessageId: telegramMessageId,
 	});
 
 	const today = getCurrentDate(chat.timezone);
+
+	const text = `Entrada: ${session.clock_in}
+
+¿Cómo quieres registrar la salida?`;
 
 	const keyboard =
 		workDate === today
@@ -84,13 +105,9 @@ export async function startOutForDate({
 					],
 				};
 
-	await sendTelegramMessage(
-		env.TELEGRAM_BOT_TOKEN,
-		telegramChatId,
-		telegramThreadId,
-		`Entrada: ${session.clock_in}
-
-Hora de salida:`,
-		keyboard,
-	);
+	if (telegramMessageId) {
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, text, keyboard);
+	} else {
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, text, keyboard);
+	}
 }

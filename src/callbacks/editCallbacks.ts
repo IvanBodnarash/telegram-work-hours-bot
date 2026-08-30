@@ -12,7 +12,7 @@ import { startEditForDate } from '../handlers/edit';
 
 import { getDateWithOffset } from '../utils/date';
 
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -24,10 +24,18 @@ interface Params {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId: number;
 	callbackData: string;
 }
 
-export async function handleEditCallbacks({ env, chat, telegramChatId, telegramThreadId, callbackData }: Params): Promise<boolean> {
+export async function handleEditCallbacks({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	telegramMessageId,
+	callbackData,
+}: Params): Promise<boolean> {
 	const editGameMatch = callbackData.match(/^edit:game:(\d+)$/);
 
 	if (editGameMatch) {
@@ -36,15 +44,15 @@ export async function handleEditCallbacks({ env, chat, telegramChatId, telegramT
 		const game = await getGameById(env.DB, gameId, chat.id);
 
 		if (!game) {
-			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Juego no encontrado.');
 
 			return true;
 		}
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})
 
 ¿Qué quieres editar?`,
@@ -104,12 +112,13 @@ export async function handleEditCallbacks({ env, chat, telegramChatId, telegramT
 
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_GAME_TIME', {
 			gameId,
+			flowMessageId: telegramMessageId,
 		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Hora actual: ${game.scheduled_time}
 
 Escribe la nueva hora.
@@ -123,7 +132,7 @@ Formato: HH:MM`,
 	if (callbackData === 'edit:cancel') {
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Edición cancelada.');
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Edición cancelada.');
 
 		return true;
 	}
@@ -141,12 +150,13 @@ Formato: HH:MM`,
 
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_GAME_CLIENT', {
 			gameId,
+			flowMessageId: telegramMessageId,
 		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Cliente actual: ${game.client_name}
 
 Escribe el nuevo nombre:`,
@@ -169,7 +179,7 @@ Escribe el nuevo nombre:`,
 		const gameTypes = await getGameTypes(env.DB, chat.id);
 
 		if (gameTypes.length === 0) {
-			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos configurados.');
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'No hay juegos configurados.');
 
 			return true;
 		}
@@ -185,10 +195,10 @@ Escribe el nuevo nombre:`,
 			rows.push(buttons.slice(i, i + 3));
 		}
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Juego actual:
 
 ${game.game_emoji} ${game.game_name}
@@ -225,18 +235,21 @@ Selecciona el nuevo juego:`,
 			telegramChatId,
 			telegramThreadId,
 			workDate,
+			telegramMessageId,
 		});
 
 		return true;
 	}
 
 	if (callbackData === 'date:edit:custom') {
-		await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_DATE');
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_DATE', {
+			flowMessageId: telegramMessageId,
+		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Escribe la fecha.
 
 Formato: DD.MM.YYYY`,
@@ -255,17 +268,17 @@ Formato: DD.MM.YYYY`,
 		const gameType = await getGameTypeById(env.DB, gameTypeId, chat.id);
 
 		if (!gameType) {
-			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Juego no encontrado.');
 
 			return true;
 		}
 
 		await updateGameType(env.DB, gameId, chat.id, gameTypeId);
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`✅ Juego actualizado:
 
 ${gameType.emoji} ${gameType.name}`,
@@ -282,19 +295,20 @@ ${gameType.emoji} ${gameType.name}`,
 		const game = await getGameById(env.DB, gameId, chat.id);
 
 		if (!game || !game.work_session_id || !game.clock_in) {
-			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Este juego no tiene hora de entrada.');
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Este juego no tiene hora de entrada.');
 
 			return true;
 		}
 
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_CLOCK_IN', {
 			sessionId: game.work_session_id,
+			flowMessageId: telegramMessageId,
 		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Entrada actual: ${game.clock_in}
 
 Escribe la nueva hora.
@@ -313,19 +327,20 @@ Formato: HH:MM`,
 		const game = await getGameById(env.DB, gameId, chat.id);
 
 		if (!game || !game.work_session_id) {
-			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Este juego no tiene sesión de trabajo.');
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Este juego no tiene sesión de trabajo.');
 
 			return true;
 		}
 
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_EDIT_CLOCK_OUT', {
 			sessionId: game.work_session_id,
+			flowMessageId: telegramMessageId,
 		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Salida actual: ${game.clock_out ?? '—'}
 
 Escribe la nueva hora.
@@ -344,15 +359,15 @@ Formato: HH:MM`,
 		const game = await getGameById(env.DB, gameId, chat.id);
 
 		if (!game) {
-			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Juego no encontrado.');
 
 			return true;
 		}
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`⚠️ ¿Eliminar este juego?
 
 ${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})`,
@@ -385,7 +400,7 @@ ${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_nam
 		const game = await getGameById(env.DB, gameId, chat.id);
 
 		if (!game) {
-			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Juego no encontrado.');
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Juego no encontrado.');
 
 			return true;
 		}
@@ -400,10 +415,10 @@ ${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_nam
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`✅ Juego eliminado:
 
 ${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})`,

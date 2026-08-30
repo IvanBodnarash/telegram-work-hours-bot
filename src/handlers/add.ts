@@ -4,7 +4,7 @@ import { getMonthSettings } from '../services/monthSettingsService';
 import { getGameTypes } from '../services/gameTypeService';
 import { setChatState } from '../services/chatStateService';
 
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 import { getDatePickerKeyboard } from '../utils/datePicker';
 
 interface Env {
@@ -19,8 +19,23 @@ interface HandleAddParams {
 	telegramThreadId: number | null;
 }
 
+interface StartAddForDateParams extends HandleAddParams {
+	workDate: string;
+	telegramMessageId?: number;
+}
+
 export async function handleAdd({ env, chat, telegramChatId, telegramThreadId }: HandleAddParams): Promise<void> {
-	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Para qué día?', getDatePickerKeyboard('add'));
+	const flowMessageId = await sendTelegramMessage(
+		env.TELEGRAM_BOT_TOKEN,
+		telegramChatId,
+		telegramThreadId,
+		'¿Para qué día?',
+		getDatePickerKeyboard('add'),
+	);
+
+	await setChatState(env.DB, chat.id, 'WAITING_FOR_ADD_DATE_SELECTION', {
+		flowMessageId,
+	});
 }
 
 export async function startAddForDate({
@@ -29,9 +44,8 @@ export async function startAddForDate({
 	telegramChatId,
 	telegramThreadId,
 	workDate,
-}: HandleAddParams & {
-	workDate: string;
-}): Promise<void> {
+	telegramMessageId,
+}: StartAddForDateParams): Promise<void> {
 	const [year, month] = workDate.split('-').map(Number);
 
 	const monthSettings = await getMonthSettings(env.DB, chat.id, year, month);
@@ -41,6 +55,7 @@ export async function startAddForDate({
 			year,
 			month,
 			workDate,
+			flowMessageId: telegramMessageId,
 		});
 
 		const monthDate = new Date(Date.UTC(year, month - 1, 1));
@@ -51,14 +66,15 @@ export async function startAddForDate({
 			year: 'numeric',
 		}).format(monthDate);
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`Nuevo mes: ${capitalize(monthName)}
+		const text = `Nuevo mes: ${capitalize(monthName)}
 
-Envía un emoji para este mes 🌴`,
-		);
+Envía un emoji para este mes 🌴`;
+
+		if (telegramMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, text);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, text);
+		}
 
 		return;
 	}
@@ -89,9 +105,14 @@ Usa /games para añadir el primer juego.`,
 
 	await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_TYPE', {
 		workDate,
+		flowMessageId: telegramMessageId,
 	});
 
-	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'Elige un juego:', keyboard);
+	if (telegramMessageId) {
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'Elige un juego:', keyboard);
+	} else {
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'Elige un juego:', keyboard);
+	}
 }
 
 function capitalize(value: string): string {

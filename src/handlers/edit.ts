@@ -1,7 +1,6 @@
 import type { Chat } from '../services/chatService';
 
-import { getCurrentDate } from '../utils/date';
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 
 import { getWorkDayByDate } from '../services/workDayService';
 import { getGamesByWorkDay } from '../services/gameService';
@@ -19,6 +18,15 @@ interface HandleEditParams {
 	telegramThreadId: number | null;
 }
 
+interface StartEditForDateParams {
+	env: Env;
+	chat: Chat;
+	telegramChatId: number;
+	telegramThreadId: number | null;
+	workDate: string;
+	telegramMessageId?: number;
+}
+
 export async function handleEdit({ env, chat, telegramChatId, telegramThreadId }: HandleEditParams): Promise<void> {
 	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Para qué día?', getDatePickerKeyboard('edit'));
 }
@@ -29,13 +37,16 @@ export async function startEditForDate({
 	telegramChatId,
 	telegramThreadId,
 	workDate,
-}: HandleEditParams & {
-	workDate: string;
-}): Promise<void> {
+	telegramMessageId,
+}: StartEditForDateParams): Promise<void> {
 	const workDay = await getWorkDayByDate(env.DB, chat.id, workDate);
 
 	if (!workDay) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para editar este día.');
+		if (telegramMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'No hay juegos para editar este día.');
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para editar este día.');
+		}
 
 		return;
 	}
@@ -43,7 +54,11 @@ export async function startEditForDate({
 	const games = await getGamesByWorkDay(env.DB, workDay.id as number);
 
 	if (games.length === 0) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para editar este día.');
+		if (telegramMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'No hay juegos para editar este día.');
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para editar este día.');
+		}
 
 		return;
 	}
@@ -63,7 +78,9 @@ export async function startEditForDate({
 		inline_keyboard: rows,
 	};
 
-	await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Qué juego quieres editar?', {
-		inline_keyboard: rows,
-	});
+	if (telegramMessageId) {
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '¿Qué juego quieres editar?', keyboard);
+	} else {
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '¿Qué juego quieres editar?', keyboard);
+	}
 }

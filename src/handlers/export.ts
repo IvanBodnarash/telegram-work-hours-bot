@@ -5,7 +5,7 @@ import { getMonthExportRows } from '../services/exportService';
 
 import { getCurrentDate } from '../utils/date';
 
-import { sendTelegramDocument, sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramDocument, sendTelegramMessage } from '../utils/telegram';
 import { minutesToDuration, timeToMinutes } from '../utils/time';
 
 interface Env {
@@ -18,6 +18,12 @@ interface HandleExportParams {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+}
+
+interface ExportMonthParams extends HandleExportParams {
+	year: number;
+	month: number;
+	telegramMessageId?: number;
 }
 
 function escapeCsv(value: unknown): string {
@@ -88,14 +94,16 @@ export async function exportMonth({
 	telegramThreadId,
 	year,
 	month,
-}: HandleExportParams & {
-	year: number;
-	month: number;
-}): Promise<void> {
+	telegramMessageId,
+}: ExportMonthParams): Promise<void> {
 	const rows = await getMonthExportRows(env.DB, chat.id, year, month);
 
 	if (rows.length === 0) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay datos para exportar este mes.');
+		if (telegramMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'No hay datos para exportar este mes.');
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay datos para exportar este mes.');
+		}
 
 		return;
 	}

@@ -8,7 +8,7 @@ import { getCurrentDate } from '../utils/date';
 
 import { minutesToDuration } from '../utils/time';
 
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -20,6 +20,16 @@ interface HandleStatsParams {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+}
+
+interface ShowMonthStatsParams {
+	env: Env;
+	chat: Chat;
+	telegramChatId: number;
+	telegramThreadId: number | null;
+	year: number;
+	month: number;
+	telegramMessageId?: number;
 }
 
 function getPreviousMonths(timezone: string, count: number) {
@@ -92,10 +102,8 @@ export async function showMonthStats({
 	telegramThreadId,
 	year,
 	month,
-}: HandleStatsParams & {
-	year: number;
-	month: number;
-}): Promise<void> {
+	telegramMessageId,
+}: ShowMonthStatsParams): Promise<void> {
 	const dates = getMonthDates(year, month);
 
 	const days = await Promise.all(
@@ -132,11 +140,7 @@ export async function showMonthStats({
 		year: 'numeric',
 	}).format(new Date(Date.UTC(year, month - 1, 1)));
 
-	await sendTelegramMessage(
-		env.TELEGRAM_BOT_TOKEN,
-		telegramChatId,
-		telegramThreadId,
-		`📊 <b>Estadísticas — ${monthName}</b>
+	const text = `📊 <b>Estadísticas — ${monthName}</b>
 
 ⏱ Horas: <b>${minutesToDuration(totalMinutes)}</b>
 📅 Días trabajados: <b>${workedDays.length}</b>
@@ -144,8 +148,11 @@ export async function showMonthStats({
 📈 Media por día: <b>${minutesToDuration(averageMinutes)}</b>
 
 <b>Top juegos</b>
-${topGames}`,
-		undefined,
-		'HTML',
-	);
+${topGames}`;
+
+	if (telegramMessageId) {
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, text, undefined, 'HTML');
+	} else {
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, text, undefined, 'HTML');
+	}
 }

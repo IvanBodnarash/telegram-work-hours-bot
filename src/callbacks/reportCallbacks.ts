@@ -20,6 +20,7 @@ interface Params {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId: number;
 	callbackData: string;
 }
 
@@ -27,7 +28,14 @@ function capitalize(value: string): string {
 	return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-export async function handleReportCallbacks({ env, chat, telegramChatId, telegramThreadId, callbackData }: Params): Promise<boolean> {
+export async function handleReportCallbacks({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	telegramMessageId,
+	callbackData,
+}: Params): Promise<boolean> {
 	const weekDayMatch = callbackData.match(/^week:day:(\d{4}-\d{2}-\d{2})$/);
 
 	if (weekDayMatch) {

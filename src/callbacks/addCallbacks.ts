@@ -16,7 +16,7 @@ import { startAddForDate } from '../handlers/add';
 
 import { getDateWithOffset } from '../utils/date';
 
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -28,14 +28,24 @@ interface Params {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId: number;
 	callbackData: string;
 }
 
-export async function handleAddCallbacks({ env, chat, telegramChatId, telegramThreadId, callbackData }: Params): Promise<boolean> {
+export async function handleAddCallbacks({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	telegramMessageId,
+	callbackData,
+}: Params): Promise<boolean> {
 	if (callbackData === 'games:add') {
-		await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_NAME');
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_NAME', {
+			flowMessageId: telegramMessageId,
+		});
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'Nombre del juego:');
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, 'Nombre del juego:');
 
 		return true;
 	}
@@ -71,14 +81,15 @@ export async function handleAddCallbacks({ env, chat, telegramChatId, telegramTh
 
 		const gameType = await getGameTypeById(env.DB, data.gameTypeId, chat.id);
 
-		await sendTelegramMessage(
-			env.TELEGRAM_BOT_TOKEN,
-			telegramChatId,
-			telegramThreadId,
-			`✅ Juego guardado
+		const resultText = `✅ Juego guardado
 
-${gameType?.emoji ?? ''} ${gameType?.name ?? ''} |${data.scheduledTime}| (${data.clientName})`,
-		);
+${gameType?.emoji ?? ''} ${gameType?.name ?? ''} |${data.scheduledTime}| (${data.clientName})`;
+
+		if (data.flowMessageId) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, resultText);
+		} else {
+			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, resultText);
+		}
 
 		return true;
 	}
@@ -86,7 +97,7 @@ ${gameType?.emoji ?? ''} ${gameType?.name ?? ''} |${data.scheduledTime}| (${data
 	if (callbackData === 'add_game:cancel') {
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, '❌ Operación cancelada.');
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Operación cancelada.');
 
 		return true;
 	}
@@ -114,18 +125,21 @@ ${gameType?.emoji ?? ''} ${gameType?.name ?? ''} |${data.scheduledTime}| (${data
 			telegramChatId,
 			telegramThreadId,
 			workDate,
+			telegramMessageId,
 		});
 
 		return true;
 	}
 
 	if (callbackData === 'date:add:custom') {
-		await setChatState(env.DB, chat.id, 'WAITING_FOR_ADD_DATE');
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_ADD_DATE', {
+			flowMessageId: telegramMessageId,
+		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Escribe la fecha.
 
 Formato: DD.MM.YYYY
@@ -167,12 +181,13 @@ Por ejemplo:
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_GAME_TIME', {
 			gameTypeId: gameType.id,
 			workDate: stateData.workDate,
+			flowMessageId: telegramMessageId,
 		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`${gameType.emoji} ${gameType.name}
 
 ¿A qué hora es el juego?

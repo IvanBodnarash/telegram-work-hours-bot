@@ -4,7 +4,7 @@ import { setChatState } from '../services/chatStateService';
 
 import { showMonthStats } from '../handlers/stats';
 
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage } from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -16,10 +16,18 @@ interface Params {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId: number;
 	callbackData: string;
 }
 
-export async function handleStatsCallbacks({ env, chat, telegramChatId, telegramThreadId, callbackData }: Params): Promise<boolean> {
+export async function handleStatsCallbacks({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	telegramMessageId,
+	callbackData,
+}: Params): Promise<boolean> {
 	const monthMatch = callbackData.match(/^stats:month:(\d{4}):(\d{1,2})$/);
 
 	if (monthMatch) {
@@ -33,24 +41,24 @@ export async function handleStatsCallbacks({ env, chat, telegramChatId, telegram
 			telegramThreadId,
 			year,
 			month,
+			telegramMessageId,
 		});
 
 		return true;
 	}
 
 	if (callbackData === 'stats:custom') {
-		await setChatState(env.DB, chat.id, 'WAITING_FOR_STATS_MONTH');
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_STATS_MONTH', {
+			flowMessageId: telegramMessageId,
+		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Escribe el mes.
 
-Formato: MM.YYYY
-
-Por ejemplo:
-07.2026`,
+Formato: MM.YYYY`,
 		);
 
 		return true;

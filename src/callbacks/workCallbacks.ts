@@ -12,7 +12,7 @@ import { startOutForDate } from '../handlers/out';
 
 import { getDateWithOffset, getCurrentDate } from '../utils/date';
 
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -24,10 +24,18 @@ interface Params {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId: number;
 	callbackData: string;
 }
 
-export async function handleWorkCallbacks({ env, chat, telegramChatId, telegramThreadId, callbackData }: Params): Promise<boolean> {
+export async function handleWorkCallbacks({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	telegramMessageId,
+	callbackData,
+}: Params): Promise<boolean> {
 	const inDateMatch = callbackData.match(/^date:in:(today|yesterday|before_yesterday)$/);
 
 	if (inDateMatch) {
@@ -51,18 +59,21 @@ export async function handleWorkCallbacks({ env, chat, telegramChatId, telegramT
 			telegramChatId,
 			telegramThreadId,
 			workDate,
+			telegramMessageId,
 		});
 
 		return true;
 	}
 
 	if (callbackData === 'date:in:custom') {
-		await setChatState(env.DB, chat.id, 'WAITING_FOR_IN_DATE');
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_IN_DATE', {
+			flowMessageId: telegramMessageId,
+		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Escribe la fecha.
 
 Formato: DD.MM.YYYY`,
@@ -94,18 +105,21 @@ Formato: DD.MM.YYYY`,
 			telegramChatId,
 			telegramThreadId,
 			workDate,
+			telegramMessageId,
 		});
 
 		return true;
 	}
 
 	if (callbackData === 'date:out:custom') {
-		await setChatState(env.DB, chat.id, 'WAITING_FOR_OUT_DATE');
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_OUT_DATE', {
+			flowMessageId: telegramMessageId,
+		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Escribe la fecha.
 
 Formato: DD.MM.YYYY`,
@@ -132,6 +146,7 @@ Formato: DD.MM.YYYY`,
 			gameId: game.id,
 			workDayId: game.work_day_id,
 			workDate,
+			flowMessageId: telegramMessageId,
 		});
 
 		const today = getCurrentDate(chat.timezone);
@@ -163,10 +178,10 @@ Formato: DD.MM.YYYY`,
 						],
 					};
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`${game.game_emoji} ${game.game_name} |${game.scheduled_time}| (${game.client_name})
 
 Hora de entrada:`,
@@ -206,10 +221,10 @@ Hora de entrada:`,
 				clock_in: string;
 			};
 
-			await sendTelegramMessage(
+			await editTelegramMessage(
 				env.TELEGRAM_BOT_TOKEN,
 				telegramChatId,
-				telegramThreadId,
+				telegramMessageId,
 				`⚠️ Ya hay una sesión abierta desde ${openSession.clock_in}.
 
 Primero registra la salida con /out.`,
@@ -224,7 +239,7 @@ Primero registra la salida con /out.`,
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Entrada registrada: ${currentTime}`);
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, `✅ Entrada registrada: ${currentTime}`);
 
 		return true;
 	}
@@ -236,10 +251,10 @@ Primero registra la salida con /out.`,
 			return true;
 		}
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Escribe la hora de entrada.
 
 Formato: HH:MM`,
@@ -274,7 +289,7 @@ Formato: HH:MM`,
 
 		await clearChatState(env.DB, chat.id);
 
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida registrada: ${currentTime}`);
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, `✅ Salida registrada: ${currentTime}`);
 
 		return true;
 	}
@@ -286,10 +301,10 @@ Formato: HH:MM`,
 			return true;
 		}
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Escribe la hora de salida.
 
 Formato: HH:MM`,

@@ -6,7 +6,7 @@ import { setChatState } from '../services/chatStateService';
 
 import { getCurrentDate } from '../utils/date';
 
-import { sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -18,17 +18,27 @@ interface Params {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId: number;
 	callbackData: string;
 }
 
-export async function handleSettingsCallbacks({ env, chat, telegramChatId, telegramThreadId, callbackData }: Params): Promise<boolean> {
+export async function handleSettingsCallbacks({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	telegramMessageId,
+	callbackData,
+}: Params): Promise<boolean> {
 	if (callbackData === 'settings:night_start') {
-		await setChatState(env.DB, chat.id, 'WAITING_FOR_NIGHT_START');
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_NIGHT_START', {
+			flowMessageId: telegramMessageId,
+		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Hora nocturna actual: ${chat.night_start}
 
 Escribe la nueva hora.
@@ -49,12 +59,13 @@ Formato: HH:MM`,
 		await setChatState(env.DB, chat.id, 'WAITING_FOR_SETTINGS_MONTH_EMOJI', {
 			year,
 			month,
+			flowMessageId: telegramMessageId,
 		});
 
-		await sendTelegramMessage(
+		await editTelegramMessage(
 			env.TELEGRAM_BOT_TOKEN,
 			telegramChatId,
-			telegramThreadId,
+			telegramMessageId,
 			`Emoji actual: ${monthSettings?.emoji ?? '—'}
 
 Envía el nuevo emoji para este mes:`,
