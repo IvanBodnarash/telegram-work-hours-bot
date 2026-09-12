@@ -16,6 +16,10 @@ export function getDatePickerKeyboard(action: DateAction) {
 					text: 'Anteayer',
 					callback_data: `date:${action}:before_yesterday`,
 				},
+				{
+					text: 'Mañana',
+					callback_data: `date:${action}:tomorrow`,
+				},
 			],
 			[
 				{

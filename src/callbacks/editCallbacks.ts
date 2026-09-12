@@ -12,7 +12,7 @@ import { startEditForDate } from '../handlers/edit';
 
 import { getDateWithOffset } from '../utils/date';
 
-import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
+import { editTelegramMessage } from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -212,12 +212,16 @@ Selecciona el nuevo juego:`,
 		return true;
 	}
 
-	const editDateMatch = callbackData.match(/^date:edit:(today|yesterday|before_yesterday)$/);
+	const editDateMatch = callbackData.match(/^date:edit:(today|tomorrow|yesterday|before_yesterday)$/);
 
 	if (editDateMatch) {
 		const choice = editDateMatch[1];
 
 		let offset = 0;
+
+		if (choice === 'tomorrow') {
+			offset = 1;
+		}
 
 		if (choice === 'yesterday') {
 			offset = -1;

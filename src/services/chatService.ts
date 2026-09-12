@@ -14,6 +14,7 @@ export interface Chat {
 	timezone: string;
 	night_start: string;
 	created_at: string;
+	last_transient_message_id: number | null;
 }
 
 export async function getOrCreateChat(db: D1Database, data: TelegramChatData): Promise<Chat> {
@@ -83,5 +84,31 @@ export async function updateNightStart(db: D1Database, chatId: number, nightStar
 		`,
 		)
 		.bind(nightStart, chatId)
+		.run();
+}
+
+export async function setLastTransientMessageId(db: D1Database, chatId: number, messageId: number): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE chats
+			SET last_transient_message_id = ?
+			WHERE id = ?
+		`,
+		)
+		.bind(messageId, chatId)
+		.run();
+}
+
+export async function clearLastTransientMessageId(db: D1Database, chatId: number): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE chats
+			SET last_transient_message_id = NULL
+			WHERE id = ?
+		`,
+		)
+		.bind(chatId)
 		.run();
 }

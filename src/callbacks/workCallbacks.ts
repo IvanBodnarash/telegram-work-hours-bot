@@ -2,9 +2,9 @@ import type { Chat } from '../services/chatService';
 
 import { getChatState, clearChatState, setChatState } from '../services/chatStateService';
 
-import { getGameById, attachGameToSession } from '../services/gameService';
+import { getGameById, attachGameToSession, attachGamesToSessionRange } from '../services/gameService';
 
-import { createWorkSession, closeWorkSession, getOpenWorkSessions } from '../services/workSessionService';
+import { createWorkSession, closeWorkSession, getOpenWorkSessions, getOpenWorkSession } from '../services/workSessionService';
 
 import { startInForDate } from '../handlers/in';
 
@@ -13,6 +13,9 @@ import { startOutForDate } from '../handlers/out';
 import { getDateWithOffset, getCurrentDate } from '../utils/date';
 
 import { editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
+import { getWorkDayByDate } from '../services/workDayService';
+import { timeToMinutes } from '../utils/time';
+import { saveTransientMessage } from '../utils/transientMessage';
 
 interface Env {
 	DB: D1Database;
@@ -36,12 +39,16 @@ export async function handleWorkCallbacks({
 	telegramMessageId,
 	callbackData,
 }: Params): Promise<boolean> {
-	const inDateMatch = callbackData.match(/^date:in:(today|yesterday|before_yesterday)$/);
+	const inDateMatch = callbackData.match(/^date:in:(today|tomorrow|yesterday|before_yesterday)$/);
 
 	if (inDateMatch) {
 		const choice = inDateMatch[1];
 
 		let offset = 0;
+
+		if (choice === 'tomorrow') {
+			offset = 1;
+		}
 
 		if (choice === 'yesterday') {
 			offset = -1;
@@ -82,12 +89,16 @@ Formato: DD.MM.YYYY`,
 		return true;
 	}
 
-	const outDateMatch = callbackData.match(/^date:out:(today|yesterday|before_yesterday)$/);
+	const outDateMatch = callbackData.match(/^date:out:(today|tomorrow|yesterday|before_yesterday)$/);
 
 	if (outDateMatch) {
 		const choice = outDateMatch[1];
 
 		let offset = 0;
+
+		if (choice === 'tomorrow') {
+			offset = 1;
+		}
 
 		if (choice === 'yesterday') {
 			offset = -1;
@@ -241,6 +252,8 @@ Primero registra la salida con /out.`,
 
 		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, `✅ Entrada registrada: ${currentTime}`);
 
+		await saveTransientMessage(env, chat.id, telegramMessageId);
+
 		return true;
 	}
 
@@ -272,7 +285,7 @@ Formato: HH:MM`,
 
 		const data = chatState.data ? JSON.parse(chatState.data) : null;
 
-		if (!data?.sessionId) {
+		if (!data?.sessionId || !data?.workDayId || !data?.endGameId) {
 			await clearChatState(env.DB, chat.id);
 
 			return true;
@@ -285,11 +298,28 @@ Formato: HH:MM`,
 			hour12: false,
 		}).format(new Date());
 
+		if (data.clockIn && timeToMinutes(currentTime) < timeToMinutes(data.clockIn)) {
+			await editTelegramMessage(
+				env.TELEGRAM_BOT_TOKEN,
+				telegramChatId,
+				telegramMessageId,
+				`❌ La hora de salida no puede ser anterior a la entrada.
+
+Entrada: ${data.clockIn}`,
+			);
+
+			return true;
+		}
+
+		await attachGamesToSessionRange(env.DB, data.workDayId, data.sessionId, data.endGameId);
+
 		await closeWorkSession(env.DB, data.sessionId, currentTime);
 
 		await clearChatState(env.DB, chat.id);
 
 		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, `✅ Salida registrada: ${currentTime}`);
+
+		await saveTransientMessage(env, chat.id, telegramMessageId);
 
 		return true;
 	}
@@ -309,6 +339,90 @@ Formato: HH:MM`,
 
 Formato: HH:MM`,
 		);
+
+		return true;
+	}
+
+	const outGameMatch = callbackData.match(/^out:game:(\d+):(\d{4}-\d{2}-\d{2})$/);
+
+	if (outGameMatch) {
+		const gameId = Number(outGameMatch[1]);
+		const workDate = outGameMatch[2];
+
+		const game = await getGameById(env.DB, gameId, chat.id);
+
+		if (!game) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Juego no encontrado.');
+
+			return true;
+		}
+
+		const workDay = await getWorkDayByDate(env.DB, chat.id, workDate);
+
+		if (!workDay) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ Día de trabajo no encontrado.');
+
+			return true;
+		}
+
+		if (Number(game.work_day_id) !== Number(workDay.id)) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ El juego no pertenece a este día.');
+
+			return true;
+		}
+
+		const session = await getOpenWorkSession(env.DB, workDay.id as number);
+
+		if (!session) {
+			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, '❌ No hay ninguna sesión abierta.');
+
+			return true;
+		}
+
+		await setChatState(env.DB, chat.id, 'WAITING_FOR_OUT_TIME', {
+			sessionId: session.id,
+			workDayId: workDay.id,
+			workDate,
+			clockIn: session.clock_in,
+			endGameId: gameId,
+			flowMessageId: telegramMessageId,
+		});
+
+		const today = getCurrentDate(chat.timezone);
+
+		const text = `Entrada: ${session.clock_in}
+Hasta: ${game.game_emoji} ${game.game_name} |${game.scheduled_time}|
+
+¿Cómo quieres registrar la salida?`;
+
+		const keyboard =
+			workDate === today
+				? {
+						inline_keyboard: [
+							[
+								{
+									text: '⏱ Ahora',
+									callback_data: 'out:now',
+								},
+								{
+									text: '✏️ Escribir',
+									callback_data: 'out:manual',
+								},
+							],
+						],
+					}
+				: {
+						inline_keyboard: [
+							[
+								{
+									text: '✏️ Escribir',
+									callback_data: 'out:manual',
+								},
+							],
+						],
+					};
+
+		await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramMessageId, text, keyboard);
 
 		return true;
 	}
