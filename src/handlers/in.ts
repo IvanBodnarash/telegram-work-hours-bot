@@ -44,7 +44,7 @@ export async function startInForDate({
 	const workDay = await getWorkDayByDate(env.DB, chat.id, workDate);
 
 	if (!workDay) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para hoy.');
+		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos para este día.');
 
 		return;
 	}

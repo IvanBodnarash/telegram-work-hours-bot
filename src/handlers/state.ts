@@ -1,6 +1,6 @@
 import { updateNightStart, type Chat } from '../services/chatService';
 import { getChatState, clearChatState, setChatState } from '../services/chatStateService';
-import { attachGameToSession, updateGameClientName, updateGameScheduledTime } from '../services/gameService';
+import { attachGamesToSessionRange, attachGameToSession, updateGameClientName, updateGameScheduledTime } from '../services/gameService';
 import { createGameType, getGameTypeById } from '../services/gameTypeService';
 import { createMonthSettings, getMonthSettings, updateMonthEmoji } from '../services/monthSettingsService';
 import {
@@ -13,6 +13,7 @@ import {
 import { getCurrentDate, parseDisplayDate } from '../utils/date';
 import { deleteTelegramMessage, editTelegramMessage, sendTelegramMessage } from '../utils/telegram';
 import { timeToMinutes } from '../utils/time';
+import { saveTransientMessage } from '../utils/transientMessage';
 import { startAddForDate } from './add';
 import { startEditForDate } from './edit';
 import { exportMonth } from './export';
@@ -262,7 +263,7 @@ Escribe el nombre del cliente:`,
 
 		const today = getCurrentDate(chat.timezone);
 
-		if (data.workDate !== today) {
+		if (data.workDate < today) {
 			await setChatState(env.DB, chat.id, 'WAITING_FOR_PAST_GAME_CLOCK_IN', {
 				gameTypeId: data.gameTypeId,
 				scheduledTime: data.scheduledTime,
@@ -385,6 +386,8 @@ Primero registra la salida con /out.`,
 
 		if (data.flowMessageId) {
 			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Entrada registrada: ${time}`);
+
+			await saveTransientMessage(env, chat.id, data.flowMessageId);
 		} else {
 			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Entrada registrada: ${time}`);
 		}
@@ -431,12 +434,22 @@ Entrada: ${data.clockIn}`,
 
 		await deleteUserMessage(env, telegramChatId, telegramMessageId);
 
+		if (!data?.workDayId || !data?.endGameId) {
+			await clearChatState(env.DB, chat.id);
+
+			return true;
+		}
+
+		await attachGamesToSessionRange(env.DB, data.workDayId, data.sessionId, data.endGameId);
+
 		await closeWorkSession(env.DB, data.sessionId, time);
 
 		await clearChatState(env.DB, chat.id);
 
 		if (data.flowMessageId) {
 			await editTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, data.flowMessageId, `✅ Salida registrada: ${time}`);
+
+			await saveTransientMessage(env, chat.id, data.flowMessageId);
 		} else {
 			await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, `✅ Salida registrada: ${time}`);
 		}

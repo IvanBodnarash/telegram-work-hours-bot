@@ -102,12 +102,16 @@ ${gameType?.emoji ?? ''} ${gameType?.name ?? ''} |${data.scheduledTime}| (${data
 		return true;
 	}
 
-	const addDateMatch = callbackData.match(/^date:add:(today|yesterday|before_yesterday)$/);
+	const addDateMatch = callbackData.match(/^date:add:(today|tomorrow|yesterday|before_yesterday)$/);
 
 	if (addDateMatch) {
 		const choice = addDateMatch[1];
 
 		let offset = 0;
+
+		if (choice === 'tomorrow') {
+			offset = 1;
+		}
 
 		if (choice === 'yesterday') {
 			offset = -1;

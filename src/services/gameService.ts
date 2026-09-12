@@ -210,3 +210,43 @@ export async function deleteGame(db: D1Database, gameId: number, chatId: number)
 		.bind(gameId, chatId)
 		.run();
 }
+
+export async function attachGamesToSessionRange(db: D1Database, workDayId: number, sessionId: number, endGameId: number): Promise<void> {
+	const games = await getGamesByWorkDay(db, workDayId);
+
+	const orderedGames = [...games].sort((a, b) => {
+		const timeCompare = a.scheduled_time.localeCompare(b.scheduled_time);
+
+		if (timeCompare !== 0) {
+			return timeCompare;
+		}
+
+		return Number(a.id) - Number(b.id);
+	});
+
+	const startIndex = orderedGames.findIndex((game) => Number(game.work_session_id) === Number(sessionId));
+
+	const endIndex = orderedGames.findIndex((game) => Number(game.id) === Number(endGameId));
+
+	if (startIndex === -1 || endIndex === -1) {
+		throw new Error('Game range not found');
+	}
+
+	if (endIndex < startIndex) {
+		throw new Error('End game cannot be before start game');
+	}
+
+	const gamesInSession = orderedGames.slice(startIndex, endIndex + 1);
+
+	const conflictingGame = gamesInSession.find(
+		(game) => game.work_session_id !== null && Number(game.work_session_id) !== Number(sessionId),
+	);
+
+	if (conflictingGame) {
+		throw new Error('Game already belongs to another session');
+	}
+
+	for (const game of gamesInSession) {
+		await attachGameToSession(db, Number(game.id), sessionId);
+	}
+}

@@ -12,12 +12,13 @@ import { handleOut } from './handlers/out';
 import { handleSettings } from './handlers/settings';
 import { handleHelp } from './handlers/help';
 
-import { sendTelegramMessage, answerCallbackQuery } from './utils/telegram';
+import { sendTelegramMessage, answerCallbackQuery, deleteTelegramMessage } from './utils/telegram';
 
 import { handleCallback } from './callbacks';
 import { handleExport } from './handlers/export';
 import { handleStats } from './handlers/stats';
 import { handleCancel } from './handlers/cancel';
+import { clearPreviousTransientMessage } from './utils/transientMessage';
 
 interface Env {
 	DB: D1Database;
@@ -121,6 +122,30 @@ export default {
 
 		if (!text) {
 			return new Response('OK');
+		}
+
+		const commands = new Set([
+			'/test',
+			'/start',
+			'/today',
+			'/week',
+			'/month',
+			'/add',
+			'/in',
+			'/out',
+			'/games',
+			'/edit',
+			'/settings',
+			'/help',
+			'/export',
+			'/stats',
+			'/cancel',
+		]);
+
+		if (commands.has(text)) {
+			await clearPreviousTransientMessage(env, chat, telegramChatId);
+
+			await deleteTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, message.message_id);
 		}
 
 		if (text === '/test') {
