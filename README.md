@@ -36,6 +36,8 @@ It is designed around Telegram inline interactions and state-driven flows, so mo
 - Register work end with `/out`
 - Use the current time or enter a time manually
 - Track multiple work sessions per day
+- Group consecutive games/tasks into a single work session
+- Choose the first game when clocking in and the last game when clocking out
 - Prevent multiple open sessions for the same work day
 - Validate that clock-out is not earlier than clock-in
 - Track historical work sessions for previous dates
@@ -48,7 +50,7 @@ It is designed around Telegram inline interactions and state-driven flows, so mo
   - client name
   - game type
 - Connect games/tasks to work sessions
-- Add entries for today or previous dates
+- Add entries for past, current, or future dates
 - Manage reusable game types
 - Assign a custom emoji to each game type
 
@@ -127,7 +129,9 @@ Multi-step actions use Telegram inline keyboards and message editing.
 
 Instead of sending a new bot message for every step, the existing flow message is updated.
 
-Valid manual inputs are removed after processing, which keeps the chat clean.
+Valid manual inputs and command messages are removed after processing.
+
+Short confirmation messages such as registered clock-in and clock-out are automatically removed when the next command is started.
 
 ---
 
@@ -247,6 +251,7 @@ src/
 │   ├── date.ts
 │   ├── datePicker.ts
 │   ├── time.ts
+│   ├── transientMessage.ts
 │   └── telegram.ts
 │
 └── index.ts
@@ -286,6 +291,7 @@ Stores Telegram chat configuration, including:
 - timezone
 - night start time
 - optional Telegram thread/topic ID
+- last transient Telegram message ID
 
 ### `game_types`
 
@@ -299,7 +305,7 @@ Represents individual work dates.
 
 Stores clock-in and clock-out periods.
 
-A single work day can contain multiple sessions.
+A single work day can contain multiple sessions, and multiple consecutive games/tasks can belong to the same session.
 
 ### `games`
 
