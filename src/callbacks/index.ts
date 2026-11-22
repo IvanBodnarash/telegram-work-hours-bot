@@ -3,6 +3,7 @@ import type { Chat } from '../services/chatService';
 import { handleAddCallbacks } from './addCallbacks';
 import { handleEditCallbacks } from './editCallbacks';
 import { handleExportCallbacks } from './exportCallbacks';
+import { handleGamesCallbacks } from './gamesCallbacks';
 import { handleReportCallbacks } from './reportCallbacks';
 import { handleSettingsCallbacks } from './settingsCallbacks';
 import { handleStatsCallbacks } from './statsCallbacks';
@@ -40,6 +41,10 @@ export async function handleCallback({
 	};
 
 	if (await handleAddCallbacks(params)) {
+		return true;
+	}
+
+	if (await handleGamesCallbacks(params)) {
 		return true;
 	}
 

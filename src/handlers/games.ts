@@ -1,6 +1,11 @@
 import type { Chat } from '../services/chatService';
+
 import { getGameTypes } from '../services/gameTypeService';
-import { sendTelegramMessage } from '../utils/telegram';
+
+import {
+	editTelegramMessage,
+	sendTelegramMessage,
+} from '../utils/telegram';
 
 interface Env {
 	DB: D1Database;
@@ -12,44 +17,68 @@ interface HandleGamesParams {
 	chat: Chat;
 	telegramChatId: number;
 	telegramThreadId: number | null;
+	telegramMessageId?: number;
 }
 
-export async function handleGames({ env, chat, telegramChatId, telegramThreadId }: HandleGamesParams): Promise<void> {
+export async function handleGames({
+	env,
+	chat,
+	telegramChatId,
+	telegramThreadId,
+	telegramMessageId,
+}: HandleGamesParams): Promise<void> {
 	const gameTypes = await getGameTypes(env.DB, chat.id);
 
-	if (gameTypes.length === 0) {
-		await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, telegramChatId, telegramThreadId, 'No hay juegos configurados todavía.', {
-			inline_keyboard: [
-				[
-					{
-						text: '➕ Añadir juego',
-						callback_data: 'games:add',
-					},
-				],
-			],
-		});
+	const gamesText =
+		gameTypes.length > 0
+			? gameTypes
+				.map(
+					(gameType) =>
+						`${gameType.emoji} ${gameType.name}`,
+				)
+				.join('\n')
+			: 'No hay juegos configurados.';
 
-		return;
+	const keyboard = {
+		inline_keyboard: [
+			[
+				{
+					text: '➕ Añadir juego',
+					callback_data: 'games:add',
+				},
+			],
+			...(gameTypes.length > 0
+				? [
+					[
+						{
+							text: '🗑 Eliminar juego',
+							callback_data: 'games:delete',
+						},
+					],
+				]
+				: []),
+		],
+	};
+
+	const text = `🎮 Juegos
+
+${gamesText}`;
+
+	if (telegramMessageId) {
+		await editTelegramMessage(
+			env.TELEGRAM_BOT_TOKEN,
+			telegramChatId,
+			telegramMessageId,
+			text,
+			keyboard,
+		);
+	} else {
+		await sendTelegramMessage(
+			env.TELEGRAM_BOT_TOKEN,
+			telegramChatId,
+			telegramThreadId,
+			text,
+			keyboard,
+		);
 	}
-
-	const list = gameTypes.map((gameType) => `${gameType.emoji} ${gameType.name}`).join('\n');
-
-	await sendTelegramMessage(
-		env.TELEGRAM_BOT_TOKEN,
-		telegramChatId,
-		telegramThreadId,
-		`🎮 Juegos
-
-${list}`,
-		{
-			inline_keyboard: [
-				[
-					{
-						text: '➕ Añadir juego',
-						callback_data: 'games:add',
-					},
-				],
-			],
-		},
-	);
 }

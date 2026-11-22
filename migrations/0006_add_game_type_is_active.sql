@@ -1,0 +1,4 @@
+-- Migration number: 0006 	 2026-11-22T18:23:57.544Z
+
+ALTER TABLE game_types
+ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;

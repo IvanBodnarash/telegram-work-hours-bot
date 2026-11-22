@@ -3,6 +3,7 @@ export interface GameType {
 	chat_id: number;
 	name: string;
 	emoji: string;
+	is_active: number;
 }
 
 export async function getGameTypes(db: D1Database, chatId: number): Promise<GameType[]> {
@@ -11,7 +12,8 @@ export async function getGameTypes(db: D1Database, chatId: number): Promise<Game
 			`
       SELECT *
       FROM game_types
-      WHERE chat_id = ?
+			WHERE chat_id = ?
+			  AND is_active = 1
       ORDER BY name
     `,
 		)
@@ -21,20 +23,39 @@ export async function getGameTypes(db: D1Database, chatId: number): Promise<Game
 	return result.results;
 }
 
-export async function createGameType(db: D1Database, chatId: number, name: string, emoji: string): Promise<void> {
-	await db
+export async function createGameType(
+	db: D1Database,
+	chatId: number,
+	name: string,
+	emoji: string,
+): Promise<GameType> {
+	const gameType = await db
 		.prepare(
 			`
-      INSERT INTO game_types (
-        chat_id,
-        name,
-        emoji
-      )
-      VALUES (?, ?, ?)
-    `,
+			INSERT INTO game_types (
+				chat_id,
+				name,
+				emoji,
+				is_active
+			)
+			VALUES (?, ?, ?, 1)
+
+			ON CONFLICT(chat_id, name)
+			DO UPDATE SET
+				emoji = excluded.emoji,
+				is_active = 1
+
+			RETURNING *
+		`,
 		)
 		.bind(chatId, name, emoji)
-		.run();
+		.first<GameType>();
+
+	if (!gameType) {
+		throw new Error('Failed to create game type');
+	}
+
+	return gameType;
 }
 
 export async function getGameTypeById(db: D1Database, gameTypeId: number, chatId: number): Promise<GameType | null> {
@@ -49,4 +70,22 @@ export async function getGameTypeById(db: D1Database, gameTypeId: number, chatId
 		)
 		.bind(gameTypeId, chatId)
 		.first<GameType>();
+}
+
+export async function deactivateGameType(
+	db: D1Database,
+	gameTypeId: number,
+	chatId: number,
+): Promise<void> {
+	await db
+		.prepare(
+			`
+			UPDATE game_types
+			SET is_active = 0
+			WHERE id = ?
+			  AND chat_id = ?
+		`,
+		)
+		.bind(gameTypeId, chatId)
+		.run();
 }
